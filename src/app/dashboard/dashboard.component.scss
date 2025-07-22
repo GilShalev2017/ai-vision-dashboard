@@ -1,0 +1,606 @@
+.dashboard-container {
+    padding: 16px;
+}
+
+.video-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.video-wrapper {
+    position: relative;
+}
+
+video {
+    width: 100%;
+    height: auto;
+}
+
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.face-rect {
+    position: absolute;
+    border: 2px solid red;
+    color: white;
+    background: rgba(0, 0, 0, 0.5);
+    font-size: 12px;
+    padding: 2px 4px;
+}
+
+.captions {
+    position: absolute;
+    bottom: 5px;
+    left: 5px;
+    right: 5px;
+    color: yellow;
+    font-size: 14px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 4px;
+    border-radius: 4px;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Define colors based on the image
+$primary-bg: #222831; // Dark background
+$secondary-bg: #2C3440; // Card/Sidebar background
+$text-color: #EEEEEE; // Light text
+$accent-color: #00ADB5; // Teal/Cyan accents (e.g., LiveU logo, active states)
+$border-color: #393E46; // Darker border/divider color
+$control-icon-color: #A9A9A9; // Slightly lighter grey for video controls
+$file-input-bg: rgba(0, 0, 0, 0.7); // Background for file input overlay
+
+// Base styles for the entire application
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: 'Inter', sans-serif;
+    background-color: $primary-bg;
+    color: $text-color;
+    overflow: hidden; // Prevent scrolling on the main page
+}
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh; // Full viewport height
+    width: 100vw; // Full viewport width
+    overflow: hidden;
+}
+
+// Toolbar styling
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background-color: $secondary-bg;
+    border-bottom: 1px solid $border-color;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    min-height: 60px; // Fixed height for toolbar
+    z-index: 10; // Ensure toolbar is above content
+
+    .toolbar-left {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+
+        .logo-text {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: $accent-color;
+        }
+
+        .project-dropdown {
+            .project-button {
+                background-color: $border-color;
+                color: $text-color;
+                border-radius: 8px;
+                padding: 8px 15px;
+                font-size: 0.9rem;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                transition: background-color 0.2s ease;
+                box-shadow: none; // Remove mat-button default shadow
+
+                &:hover {
+                    background-color: lighten($border-color, 5%);
+                }
+            }
+        }
+    }
+
+    .toolbar-right {
+        .settings-icon {
+            font-size: 1.5rem;
+            color: $text-color;
+            cursor: pointer;
+            transition: color 0.2s ease;
+
+            &:hover {
+                color: $accent-color;
+            }
+        }
+    }
+}
+
+// Main content area (video grid + sidebar)
+.main-content {
+    display: flex;
+    flex-grow: 1; // Takes remaining height
+    padding: 15px;
+    gap: 15px; // Gap between video grid and sidebar
+    overflow: hidden; // Prevent scrolling within main content
+}
+
+// Angular Material Grid List styling
+mat-grid-list {
+    flex-grow: 1; // Takes up available space
+    transition: opacity 0.3s ease; // Smooth transition when hidden
+
+    &.hidden {
+        opacity: 0;
+        pointer-events: none; // Disable interactions when hidden
+    }
+
+    mat-grid-tile {
+
+        // Content of each tile should fill it
+        .video-card {
+            width: 100%;
+            height: 100%;
+            background-color: $secondary-bg;
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            transition: box-shadow 0.3s ease; // Transition for shadow on hover/focus
+
+            mat-card {
+                background-color: transparent; // Make card background transparent to use .video-card background
+                box-shadow: none;
+                padding: 0; // Remove default mat-card padding
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+            }
+        }
+    }
+}
+
+// Individual Video Card styling (shared with maximized version)
+.video-card {
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px;
+        background-color: darken($secondary-bg, 5%); // Slightly darker header
+        border-bottom: 1px solid $border-color;
+        font-size: 1rem;
+        font-weight: 500;
+        flex-shrink: 0; // Prevent header from shrinking
+        border-radius: 12px 12px 0 0;
+
+        .card-title-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+
+            .icon {
+                color: $accent-color;
+                font-size: 1.1rem;
+            }
+
+            .title-text {
+                color: $text-color;
+            }
+        }
+
+        .card-actions-top {
+            display: flex;
+            gap: 10px;
+
+            .card-icon {
+                color: $control-icon-color;
+                cursor: pointer;
+                font-size: 0.9rem;
+                transition: color 0.2s ease;
+
+                &:hover {
+                    color: $accent-color;
+                }
+            }
+
+            .maximize-icon {
+                font-size: 1.1rem;
+            }
+        }
+    }
+
+    .video-wrapper {
+        position: relative;
+        flex-grow: 1; // Takes up remaining space in the card
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #000; // Black background for video area
+        overflow: hidden; // Ensure video stays within bounds
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; // Cover the area without stretching
+            display: block; // Remove extra space below video
+        }
+
+        // Radio button styling
+        .input-source-radios {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            padding: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+
+            .mat-radio-button {
+                color: $text-color; // Text color
+
+                .mat-radio-label-content {
+                    color: $text-color;
+                }
+
+                .mat-radio-outer-circle {
+                    border-color: $text-color;
+                }
+
+                &.mat-radio-checked .mat-radio-inner-circle {
+                    background-color: $accent-color;
+                }
+            }
+        }
+
+        // File input styling
+        .file-input {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 5;
+            color: $text-color;
+            background-color: $file-input-bg;
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            opacity: 0.9; // Slightly transparent
+            border: 1px solid $border-color;
+
+            // Style the button if browser supports ::file-selector-button
+            &::file-selector-button {
+                background-color: $accent-color;
+                color: $primary-bg;
+                padding: 5px 10px;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                transition: background-color 0.2s ease;
+                margin-right: 10px;
+
+                &:hover {
+                    background-color: lighten($accent-color, 10%);
+                }
+            }
+
+            &:hover {
+                opacity: 1;
+                box-shadow: 0 0 10px rgba($accent-color, 0.5);
+            }
+        }
+
+        // Overlay for face detection
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; // Allow clicks to pass through to video
+            z-index: 20; // Above video but below controls
+
+            .face-rect {
+                position: absolute;
+                border: 2px solid #FFD700; // Gold color for face detection
+                border-radius: 5px;
+                box-sizing: border-box;
+
+                .label {
+                    background-color: #FFD700;
+                    color: #000;
+                    padding: 2px 5px;
+                    font-size: 0.7rem;
+                    position: absolute;
+                    top: -18px;
+                    left: 0;
+                    border-radius: 3px;
+                    white-space: nowrap;
+                }
+            }
+        }
+
+        // Video bottom controls
+        .video-controls-bottom {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 8px;
+            padding: 5px 10px;
+            z-index: 30; // Above overlay
+
+            .live-indicator {
+                color: #FF0000; // Red dot for live
+                font-size: 0.8rem;
+            }
+
+            .control-icon {
+                color: $control-icon-color;
+                font-size: 1.1rem;
+                cursor: pointer;
+                margin: 0 5px;
+                transition: color 0.2s ease;
+
+                &:hover {
+                    color: $accent-color;
+                }
+            }
+        }
+    }
+
+    // Captions area styling
+    .captions-area {
+        padding: 10px 15px;
+        background-color: darken($secondary-bg, 5%);
+        min-height: 50px; // Ensure space for two lines
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        font-size: 0.9rem;
+        line-height: 1.3;
+        color: lighten($text-color, 10%);
+        overflow: hidden; // Hide overflow if text is too long
+        flex-shrink: 0; // Prevent from shrinking
+
+        .caption-line-1,
+        .caption-line-2 {
+            white-space: normal; // Allow text to wrap
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 1; // Limit to 1 line
+            -webkit-box-orient: vertical;
+        }
+
+        .caption-line-2 {
+            font-size: 0.8rem;
+            color: lighten($text-color, 5%);
+        }
+    }
+
+    // Bottom action buttons
+    .bottom-actions {
+        padding: 10px 15px;
+        background-color: darken($secondary-bg, 10%); // Even darker background
+        display: flex;
+        flex-wrap: wrap; // Allow buttons to wrap
+        gap: 5px;
+        justify-content: center;
+        flex-shrink: 0; // Prevent from shrinking
+
+        button {
+            background-color: $accent-color;
+            color: $primary-bg; // Dark text on accent buttons
+            border-radius: 5px;
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+            min-width: unset; // Override default mat-button min-width
+            line-height: 1.5; // Adjust line height for smaller buttons
+            height: auto; // Allow button height to adjust
+            white-space: nowrap; // Prevent text wrap on buttons
+
+            &:hover {
+                background-color: lighten($accent-color, 10%);
+            }
+        }
+    }
+}
+
+// Maximize overlay and single maximized card styling
+.maximized-card-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.8); // Semi-transparent black background
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999; // Below toolbar, but above everything else
+
+    .maximized-single {
+        width: 90vw; // Maximize to 90% viewport width
+        height: 90vh; // Maximize to 90% viewport height
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        background-color: $secondary-bg; // Ensure background is visible
+        transition: all 0.3s ease-in-out; // Smooth transition for maximize
+    }
+
+    // Adjust video content for maximized view:
+    .maximized-single .video-wrapper video {
+        object-fit: contain; // Ensure video fits within the wrapper without cropping
+    }
+}
+
+
+// Sidebar styling
+.sidebar {
+    width: 250px; // Fixed width for sidebar
+    background-color: $secondary-bg;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0; // Prevent sidebar from shrinking
+    transition: all 0.3s ease-in-out; // For hiding/showing
+
+    &.hidden {
+        width: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+        opacity: 0;
+        box-shadow: none;
+        transform: translateX(100%); // Slide out to the right
+    }
+
+    .sidebar-header {
+        display: flex;
+        justify-content: flex-start; // Align items to start
+        align-items: center;
+        padding-bottom: 15px;
+        border-bottom: 1px solid $border-color;
+        margin-bottom: 15px;
+        gap: 10px; // Space between icon and title
+
+        .azure-icon {
+            color: $accent-color; // Azure icon color
+            font-size: 1.3rem;
+        }
+
+        .sidebar-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: $accent-color;
+        }
+
+        .fas.fa-chevron-right {
+            // Specific for the chevron icon
+            margin-left: auto; // Push chevron to the right
+            color: $text-color;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+    }
+
+    .sidebar-menu {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+
+        li {
+            padding: 10px 0;
+            font-size: 1rem;
+            color: lighten($text-color, 10%);
+            cursor: pointer;
+            transition: color 0.2s ease;
+
+            &:hover {
+                color: $accent-color;
+            }
+        }
+    }
+}
+
+// Responsive adjustments
+@media (max-width: 1024px) {
+
+    // Adjust rowHeight for smaller screens to keep 2x2 layout without scrolling
+    mat-grid-list {
+        rowHeight: calc(50vh - 60px - 20px); // Slightly less padding/gutter accounted for
+    }
+}
+
+@media (max-width: 768px) {
+    .main-content {
+        flex-direction: column; // Stack grid and sidebar vertically
+        padding: 10px;
+        gap: 10px;
+    }
+
+    mat-grid-list {
+        grid-template-columns: 1fr !important; // Single column on small screens
+        rowHeight: auto !important; // Allow height to be determined by content or max-height
+        height: auto;
+        max-height: calc(100vh - 60px - 20px - 250px); // Total viewport height - toolbar - main content padding - sidebar height
+        overflow-y: auto; // Allow scrolling within grid if needed
+    }
+
+    mat-grid-tile {
+        height: auto !important; // Allow tiles to grow
+
+        .video-card {
+            height: 400px; // Fixed height for cards in single column view
+        }
+    }
+
+    .sidebar {
+        width: 100%; // Full width
+
+        &.hidden {
+            display: none; // Completely hide on small screens when maximized
+            transform: translateX(0); // No transform needed if display: none
+        }
+    }
+
+    .maximized-card-overlay .maximized-single {
+        width: 95vw;
+        height: 95vh;
+    }
+}
+
+// Ensure Angular Material elements respect our theming
+.mat-button {
+    min-width: unset;
+}
+
+.mat-card {
+    border-radius: 12px;
+}

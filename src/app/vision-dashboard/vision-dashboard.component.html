@@ -1,0 +1,84 @@
+<!-- <mat-toolbar color="primary" class="toolbar">
+  <span class="title">LiveU Vision AI</span>
+  <span class="spacer"></span>
+  <mat-select placeholder="Project" disableRipple>
+    <mat-option value="project">Project</mat-option>
+  </mat-select>
+  <button mat-icon-button>
+    <mat-icon>settings</mat-icon>
+  </button>
+</mat-toolbar>
+
+<div class="dashboard">
+  <div class="cards">
+    <mat-card class="card" *ngFor="let card of cards">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>{{ card.icon }}</mat-icon>
+        <mat-card-title>{{ card.title }}</mat-card-title>
+      </mat-card-header>
+      <video class="video" [src]="card.videoSrc" controls muted></video>
+      <mat-card-content>
+        <p>{{ card.subtitle }}</p>
+        <p *ngIf="card.translation">{{ card.translation }}</p>
+        <p *ngIf="card.license">{{ card.license }}</p>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <mat-card class="sidebar">
+    <mat-nav-list>
+      <h3 mat-subheader>Azure</h3>
+      <mat-list-item *ngFor="let feature of features">
+        <span mat-line>{{ feature }}</span>
+      </mat-list-item>
+    </mat-nav-list>
+  </mat-card>
+</div> -->
+
+
+<mat-toolbar color="primary" class="toolbar">
+  <span class="title">(ChatGPT) LiveU Vision AI</span>
+  <span class="spacer"></span>
+  <mat-select placeholder="Project" disableRipple>
+    <mat-option value="project">Project</mat-option>
+  </mat-select>
+  <button mat-icon-button>
+    <mat-icon>settings</mat-icon>
+  </button>
+</mat-toolbar>
+
+<div class="dashboard">
+  <div class="cards">
+    <mat-card class="card" *ngFor="let card of cards">
+      <div class="card-top">
+        <mat-icon>{{ card.icon }}</mat-icon>
+        <span>{{ card.title }}</span>
+      </div>
+
+      <div class="input-source">
+        <mat-radio-group [(ngModel)]="card.inputSource" (change)="onInputSourceChange(card, $event.value)">
+          <mat-radio-button *ngIf="card.allowCamera" value="camera">Camera</mat-radio-button>
+          <mat-radio-button value="file">File</mat-radio-button>
+        </mat-radio-group>
+      </div>
+
+      <div class="video-wrapper">
+        <ng-container *ngIf="card.inputSource === 'file'">
+          <video [src]="card.videoSrc" class="video" autoplay muted controls></video>
+        </ng-container>
+        <ng-container *ngIf="card.inputSource === 'camera' && card.allowCamera">
+          <video class="video" autoplay muted playsinline></video>
+        </ng-container>
+      </div>
+    </mat-card>
+  </div>
+
+  <mat-card class="sidebar">
+    <mat-nav-list>
+      <h3 mat-subheader>Azure</h3>
+      <mat-list-item *ngFor="let feature of features">
+        <span mat-line>{{ feature }}</span>
+      </mat-list-item>
+    </mat-nav-list>
+  </mat-card>
+</div>
