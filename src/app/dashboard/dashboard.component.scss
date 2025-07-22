@@ -48,18 +48,6 @@ video {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 // Define colors based on the image
 $primary-bg: #222831; // Dark background
 $secondary-bg: #2C3440; // Card/Sidebar background
@@ -94,7 +82,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 20px;
+    padding: 5px 20px;
     background-color: $secondary-bg;
     border-bottom: 1px solid $border-color;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
@@ -150,10 +138,18 @@ body {
 // Main content area (video grid + sidebar)
 .main-content {
     display: flex;
+   
     flex-grow: 1; // Takes remaining height
     padding: 15px;
     gap: 15px; // Gap between video grid and sidebar
     overflow: hidden; // Prevent scrolling within main content
+
+
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 // Angular Material Grid List styling
@@ -251,7 +247,7 @@ mat-grid-list {
         justify-content: center;
         background-color: #000; // Black background for video area
         overflow: hidden; // Ensure video stays within bounds
-        height: 300px; // Set fixed height
+        height: 250px; // Set fixed height
 
         video {
             width: 100%;
@@ -491,6 +487,7 @@ mat-grid-list {
     flex-direction: column;
     flex-shrink: 0; // Prevent sidebar from shrinking
     transition: all 0.3s ease-in-out; // For hiding/showing
+    height: 100%;
 
     &.hidden {
         width: 0;
