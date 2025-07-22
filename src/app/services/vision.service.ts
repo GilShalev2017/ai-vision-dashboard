@@ -18,6 +18,7 @@ export class VisionService {
   // FIX: Updated inputSource type to include 'laptop-camera' and 'smartphone-camera'
   public inputSource: Record<string, 'laptop-camera' | 'smartphone-camera' | 'file'> = {};
   public recorders: Record<string, MediaRecorder> = {};
+  private currentOperations: { [key: string]: Set<'stt' | 'stt-openai' | 'translate' | 'faces' | 'ocr'> } = {};
 
   constructor(private http: HttpClient) { }
 
@@ -37,10 +38,56 @@ export class VisionService {
   }
 
   /**
+   * Get the current operations for a stream
+   */
+  getCurrentOperations(stream: string): Set<'stt' | 'stt-openai' | 'translate' | 'faces' | 'ocr'> {
+    return this.currentOperations[stream] || new Set();
+  }
+
+  /**
+   * Add an operation to a stream
+   */
+  addOperation(stream: string, operation: 'stt' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): void {
+    if (!this.currentOperations[stream]) {
+      this.currentOperations[stream] = new Set();
+    }
+    this.currentOperations[stream].add(operation);
+  }
+
+  /**
+   * Remove an operation from a stream
+   */
+  removeOperation(stream: string, operation: 'stt' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): void {
+    if (this.currentOperations[stream]) {
+      this.currentOperations[stream].delete(operation);
+      // Clean up empty sets
+      if (this.currentOperations[stream].size === 0) {
+        delete this.currentOperations[stream];
+      }
+    }
+  }
+
+  /**
+   * Clear all operations for a stream
+   */
+  clearOperations(stream: string): void {
+    delete this.currentOperations[stream];
+  }
+
+  /**
+   * Check if a stream has a specific operation active
+   */
+  hasOperation(stream: string, operation: 'stt' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): boolean {
+    const operations = this.currentOperations[stream];
+    return operations ? operations.has(operation) : false;
+  }
+
+  /**
    * Stops all ongoing operations and media tracks for a specific stream.
    * This is crucial when changing input sources or stopping an active operation.
    */
   stopOperation(stream: string): void {
+    this.clearOperations(stream);
     // Stop any ongoing STT WebSocket operations
     if (this.sttSockets[stream] && this.sttSockets[stream].readyState === WebSocket.OPEN) {
       this.sttSockets[stream].close();

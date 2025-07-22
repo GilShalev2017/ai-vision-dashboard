@@ -4,7 +4,7 @@
 <div class="dashboard-container">
   <header class="toolbar">
     <div class="toolbar-left">
-      <span class="logo-text">(Mine) LiveU Vision AI</span>
+      <span class="logo-text">LiveU Vision AI</span>
       <div class="project-dropdown">
         <button mat-button class="project-button">
           Project <i class="fas fa-chevron-down"></i>
@@ -15,7 +15,6 @@
       <i class="fas fa-cog settings-icon"></i>
     </div>
   </header>
-  <br>
   <div class="main-content">
     <div class="video-grid">
       <div class="video-card" *ngFor="let stream of streams; let i = index">
@@ -57,13 +56,40 @@
             </div>
           </div>
           <mat-card-actions>
-            <button mat-button (click)="startOperation(stream, 'stt-openai')">Transcribe (OpenAI)</button>
-            <button mat-button (click)="startOperation(stream, 'stt')">Transcribe (Azure)</button>
-            <button mat-button (click)="startOperation(stream, 'translate')">Translate</button>
-            <button mat-button (click)="startOperation(stream, 'faces')">Faces</button>
-            <button mat-button (click)="startOperation(stream, 'ocr')">OCR</button>
+            <mat-chip-listbox [multiple]="true">
+              <mat-chip-option (click)="startOperation(stream, 'stt-openai')"
+                [selected]="visionService.hasOperation(stream, 'stt-openai')"
+                [color]="visionService.hasOperation(stream, 'stt-openai') ? 'primary' : 'default'"
+                matTooltip="Transcribe (OpenAI)">
+                <mat-icon>record_voice_over</mat-icon>
+              </mat-chip-option>
+              <mat-chip-option (click)="startOperation(stream, 'stt')"
+                [selected]="visionService.hasOperation(stream, 'stt')"
+                [color]="visionService.hasOperation(stream, 'stt') ? 'primary' : 'default'"
+                matTooltip="Transcribe (Azure)">
+                <mat-icon>settings_voice</mat-icon>
+              </mat-chip-option>
+              <mat-chip-option (click)="startOperation(stream, 'translate')"
+                [selected]="visionService.hasOperation(stream, 'translate')"
+                [color]="visionService.hasOperation(stream, 'translate') ? 'primary' : 'default'"
+                matTooltip="Translate">
+                <mat-icon>translate</mat-icon>
+              </mat-chip-option>
+              <mat-chip-option (click)="startOperation(stream, 'faces')"
+                [selected]="visionService.hasOperation(stream, 'faces')"
+                [color]="visionService.hasOperation(stream, 'faces') ? 'primary' : 'default'"
+                matTooltip="Face Detection">
+                <mat-icon>face</mat-icon>
+              </mat-chip-option>
+              <mat-chip-option (click)="startOperation(stream, 'ocr')"
+                [selected]="visionService.hasOperation(stream, 'ocr')"
+                [color]="visionService.hasOperation(stream, 'ocr') ? 'primary' : 'default'"
+                matTooltip="OCR">
+                <mat-icon>description</mat-icon>
+              </mat-chip-option>
+            </mat-chip-listbox>
 
-            <button mat-icon-button [matMenuTriggerFor]="inputSourceMenuGrid"
+            <button class="align-right" mat-icon-button [matMenuTriggerFor]="inputSourceMenuGrid"
               [matMenuTriggerData]="{ currentStream: stream, currentFileInput: fileInputGrid }">
               <mat-icon>more_vert</mat-icon> </button>
             <mat-menu #inputSourceMenuGrid="matMenu">
@@ -98,199 +124,3 @@
     </aside>
   </div>
 </div>
-
-
-<!-- <div class="app-container">
-  <header class="toolbar">
-    <div class="toolbar-left">
-      <span class="logo-text">(Gemini) LiveU Vision AI</span>
-      <div class="project-dropdown">
-        <button mat-button class="project-button">
-          Project <i class="fas fa-chevron-down"></i>
-        </button>
-      </div>
-    </div>
-    <div class="toolbar-right">
-      <i class="fas fa-cog settings-icon"></i>
-    </div>
-  </header>
-  <div class="main-content">
-    <mat-grid-list cols="2" rowHeight="50vh" gutterSize="15px" [ngClass]="{ 'hidden': maximizedCardIndex !== null }">
-      <mat-grid-tile *ngFor="let stream of streams; let i = index">
-        <div class="video-card" [ngClass]="{ 'maximized': maximizedCardIndex === i }">
-          <mat-card>
-            <div class="card-header">
-              <div class="card-title-group">
-                <i class="icon" [ngClass]="getStreamIcon(stream)"></i>
-                <span class="title-text">{{ getStreamTitle(stream) }}</span>
-              </div>
-              <div class="card-actions-top">
-                <i class="fas fa-bell card-icon"></i>
-                <i class="fas fa-info-circle card-icon"></i>
-                <i class="fas"
-                  [ngClass]="{'fa-expand-alt': maximizedCardIndex !== i, 'fa-compress-alt': maximizedCardIndex === i}"
-                  class="card-icon maximize-icon" (click)="toggleMaximize(i)"></i>
-              </div>
-            </div>
-
-            <div class="video-wrapper">
-              <input #fileInputGrid type="file" accept="video/mp4" style="display: none;"
-                (change)="visionService.loadVideoFile($event, stream, videoFilePlayers.toArray()[i]?.nativeElement!)"
-                class="file-input" />
-
-              <ng-container *ngIf="visionService.inputSource[stream] === 'file'">
-                <video #videoFilePlayer [id]="'video-file-player-' + i" autoplay muted controls></video>
-              </ng-container>
-
-              <ng-container
-                *ngIf="visionService.inputSource[stream] === 'laptop-camera' || visionService.inputSource[stream] === 'smartphone-camera'">
-                <video #cameraVideoPlayer [id]="'camera-video-player-' + i" autoplay muted playsinline></video>
-              </ng-container>
-
-              <div class="overlay" *ngFor="let face of getOverlay(stream)">
-                <div class="face-rect"
-                  [ngStyle]="{ left: face.x + 'px', top: face.y + 'px', width: face.w + 'px', height: face.h + 'px' }">
-                  <span class="label">{{ face.label }}</span>
-                </div>
-              </div>
-
-              <div class="video-controls-bottom">
-                <i class="fas fa-circle live-indicator"></i>
-                <i class="fas fa-play-circle control-icon"></i>
-                <i class="fas fa-volume-up control-icon"></i>
-                <i class="fas fa-cog control-icon"></i>
-                <i class="fas fa-share-alt control-icon"></i>
-                <i class="fas fa-expand control-icon"></i>
-              </div>
-            </div>
-
-            <div class="captions-area">
-              <span class="caption-line-1">{{ getCaptions(stream) }}</span>
-              <span class="caption-line-2">{{ getCaptionLine2(stream) }}</span>
-            </div>
-
-            <mat-card-actions class="bottom-actions">
-              <button mat-button (click)="startOperation(stream, 'stt-openai')">Transcribe OpenAI</button>
-              <button mat-button (click)="startOperation(stream, 'stt')">Transcribe Azure</button>
-              <button mat-button (click)="startOperation(stream, 'translate')">Translate</button>
-              <button mat-button (click)="startOperation(stream, 'faces')">Faces</button>
-              <button mat-button (click)="startOperation(stream, 'ocr')">OCR</button>
-
-              <button mat-icon-button [matMenuTriggerFor]="inputSourceMenuGrid"
-                [matMenuTriggerData]="{ currentStream: stream, currentFileInput: fileInputGrid }">
-                <mat-icon>more_vert</mat-icon> </button>
-              <mat-menu #inputSourceMenuGrid="matMenu">
-                <ng-template matMenuContent let-currentStream="currentStream" let-currentFileInput="currentFileInput">
-                  <button mat-menu-item
-                    (click)="onInputSourceChange(currentStream, (currentStream === 'Stream 1' ? 'laptop-camera' : 'smartphone-camera'))"
-                    [disabled]="(currentStream === 'Stream 1' && !laptopCameraDeviceId) || (currentStream === 'Stream 2' && !smartphoneCameraDeviceId)">
-                    Camera Feed
-                  </button>
-                  <button mat-menu-item (click)="triggerFileInput(currentFileInput, currentStream)">
-                    Video File Feed
-                  </button>
-                </ng-template>
-              </mat-menu>
-            </mat-card-actions>
-          </mat-card>
-        </div>
-      </mat-grid-tile>
-    </mat-grid-list>
-
-    <div class="maximized-card-overlay" *ngIf="maximizedCardIndex !== null">
-      <ng-container *ngIf="streams[maximizedCardIndex] as currentMaximizedStream">
-        <div class="video-card maximized-single">
-          <mat-card>
-            <div class="card-header">
-              <div class="card-title-group">
-                <i class="icon" [ngClass]="getStreamIcon(currentMaximizedStream)"></i>
-                <span class="title-text">{{ getStreamTitle(currentMaximizedStream) }}</span>
-              </div>
-              <div class="card-actions-top">
-                <i class="fas fa-bell card-icon"></i>
-                <i class="fas fa-info-circle card-icon"></i>
-                <i class="fas fa-compress-alt card-icon maximize-icon" (click)="toggleMaximize(maximizedCardIndex)"></i>
-              </div>
-            </div>
-
-            <div class="video-wrapper">
-              <input #fileInputMaximized type="file" accept="video/mp4" style="display: none;"
-                (change)="visionService.loadVideoFile($event, currentMaximizedStream, videoFilePlayers.toArray()[maximizedCardIndex]?.nativeElement!)" />
-
-              <ng-container *ngIf="visionService.inputSource[currentMaximizedStream] === 'file'">
-                <video [src]="videoFilePlayers.toArray()[maximizedCardIndex]?.nativeElement?.src" autoplay muted
-                  controls></video>
-              </ng-container>
-
-              <ng-container
-                *ngIf="visionService.inputSource[currentMaximizedStream] === 'laptop-camera' || visionService.inputSource[currentMaximizedStream] === 'smartphone-camera'">
-                <video [srcObject]="cameraVideoPlayers.toArray()[maximizedCardIndex]?.nativeElement?.srcObject" autoplay
-                  muted playsinline></video>
-              </ng-container>
-
-              <div class="overlay" *ngFor="let face of getOverlay(currentMaximizedStream)">
-                <div class="face-rect"
-                  [ngStyle]="{ left: face.x + 'px', top: face.y + 'px', width: face.w + 'px', height: face.h + 'px' }">
-                  <span class="label">{{ face.label }}</span>
-                </div>
-              </div>
-              <div class="video-controls-bottom">
-                <i class="fas fa-circle live-indicator"></i>
-                <i class="fas fa-play-circle control-icon"></i>
-                <i class="fas fa-volume-up control-icon"></i>
-                <i class="fas fa-cog control-icon"></i>
-                <i class="fas fa-share-alt control-icon"></i>
-                <i class="fas fa-expand control-icon"></i>
-              </div>
-            </div>
-
-            <div class="captions-area">
-              <span class="caption-line-1">{{ getCaptions(currentMaximizedStream) }}</span>
-              <span class="caption-line-2">{{ getCaptionLine2(currentMaximizedStream) }}</span>
-            </div>
-
-            <mat-card-actions class="bottom-actions">
-              <button mat-button (click)="startOperation(currentMaximizedStream, 'stt-openai')">Transcribe
-                OpenAI</button>
-              <button mat-button (click)="startOperation(currentMaximizedStream, 'stt')">Transcribe Azure</button>
-              <button mat-button (click)="startOperation(currentMaximizedStream, 'translate')">Translate</button>
-              <button mat-button (click)="startOperation(currentMaximizedStream, 'faces')">Faces</button>
-              <button mat-button (click)="startOperation(currentMaximizedStream, 'ocr')">OCR</button>
-
-              <button mat-icon-button [matMenuTriggerFor]="inputSourceMenuMaximized"
-                [matMenuTriggerData]="{ currentStream: currentMaximizedStream, currentFileInput: fileInputMaximized }">
-                <mat-icon>more_vert</mat-icon> </button>
-              <mat-menu #inputSourceMenuMaximized="matMenu">
-                <ng-template matMenuContent let-currentStream="currentStream" let-currentFileInput="currentFileInput">
-                  <button mat-menu-item
-                    (click)="onInputSourceChange(currentStream, (currentStream === 'Stream 1' ? 'laptop-camera' : 'smartphone-camera'))"
-                    [disabled]="(currentStream === 'Stream 1' && !laptopCameraDeviceId) || (currentStream === 'Stream 2' && !smartphoneCameraDeviceId)">
-                    Camera Feed
-                  </button>
-                  <button mat-menu-item (click)="triggerFileInput(currentFileInput, currentStream)">
-                    Video File Feed
-                  </button>
-                </ng-template>
-              </mat-menu>
-            </mat-card-actions>
-          </mat-card>
-        </div>
-      </ng-container>
-    </div>
-
-
-    <aside class="sidebar" [ngClass]="{ 'hidden': maximizedCardIndex !== null }">
-      <div class="sidebar-header">
-        <i class="fab fa-windows azure-icon"></i> <span class="sidebar-title">Azure</span>
-        <i class="fas fa-chevron-right"></i>
-      </div>
-      <ul class="sidebar-menu">
-        <li>Transcription</li>
-        <li>Translation</li>
-        <li>Face Detection</li>
-        <li>OCR</li>
-        <li>License Plate Detection</li>
-      </ul>
-    </aside>
-  </div>
-</div> -->

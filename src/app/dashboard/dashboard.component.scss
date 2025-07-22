@@ -251,6 +251,7 @@ mat-grid-list {
         justify-content: center;
         background-color: #000; // Black background for video area
         overflow: hidden; // Ensure video stays within bounds
+        height: 300px; // Set fixed height
 
         video {
             width: 100%;
@@ -549,6 +550,29 @@ mat-grid-list {
     }
 }
 
+// Material Chips styling
+.mat-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px;
+
+    .mat-chip {
+        cursor: pointer;
+        transition: all 0.2s ease;
+
+        &:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .mat-icon {
+            margin-right: 8px;
+            font-size: 18px;
+        }
+    }
+}
+
 // Responsive adjustments
 @media (max-width: 1024px) {
 
@@ -603,4 +627,9 @@ mat-grid-list {
 
 .mat-card {
     border-radius: 12px;
+}
+
+// Button alignment
+.align-right {
+  margin-left: auto;
 }

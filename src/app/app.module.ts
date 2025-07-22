@@ -33,6 +33,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTreeModule } from '@angular/material/tree';
 import { MatGridListModule } from '@angular/material/grid-list';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatChipsModule } from '@angular/material/chips';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 @NgModule({
@@ -74,6 +75,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
     MatTreeModule,
     MatToolbarModule,
     MatGridListModule,
+    MatChipsModule,
     BrowserAnimationsModule
   ],
   providers: [],
