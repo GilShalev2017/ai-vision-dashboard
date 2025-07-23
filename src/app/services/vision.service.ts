@@ -1,8 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of } from 'rxjs';
 
-// Add type declaration for HTMLMediaElement to include captureStream
 interface HTMLMediaElement {
   captureStream?: () => MediaStream;
 }
@@ -16,8 +14,10 @@ export class VisionService {
   private sttSockets: { [key: string]: WebSocket } = {};
   private mediaStreams: { [key: string]: MediaStream } = {}; // To store the active camera/video file MediaStream
   public inputSource: Record<string, 'laptop-camera' | 'smartphone-camera' | 'file'> = {};
-  public recorders: Record<string, MediaRecorder> = {};
+  public recorders: Record<string, MediaRecorder| AudioWorkletNode> = {};
   private currentOperations: { [key: string]: Set<'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr'> } = {};
+
+  private audioContexts: Record<string, AudioContext> = {};
 
   constructor(private http: HttpClient) { }
 
@@ -109,13 +109,30 @@ export class VisionService {
     }
 
     // Stop any ongoing MediaRecorder operations
-    if (this.recorders[stream] && this.recorders[stream].state !== 'inactive') {
-      this.recorders[stream].stop();
+    if (this.recorders[stream]) {
+      const recorder = this.recorders[stream];
+      if (recorder instanceof MediaRecorder) {
+        if (recorder.state !== 'inactive') {
+          recorder.stop();
+          console.log(`[VisionService] MediaRecorder for ${stream} stopped.`);
+        } else {
+          console.log(`[VisionService] MediaRecorder for ${stream} already inactive.`);
+        }
+      } else if (recorder instanceof AudioWorkletNode) {
+        // Disconnect worklet node
+        recorder.disconnect();
+        console.log(`[VisionService] AudioWorkletNode for ${stream} disconnected.`);
+      }
       delete this.recorders[stream];
-      console.log(`[VisionService] MediaRecorder for ${stream} stopped.`);
-    } else if (this.recorders[stream]) {
-      console.log(`[VisionService] MediaRecorder for ${stream} already inactive or not found, state: ${this.recorders[stream].state}`);
+    } else {
+      console.log(`[VisionService] MediaRecorder for ${stream} not found.`);
     }
+    
+    if (this.audioContexts[stream]) {
+      this.audioContexts[stream].close();
+      delete this.audioContexts[stream];
+    }
+
     console.log(`[VisionService] Finished stopping existing recorders and sockets for ${stream}.`);
   }
 
@@ -201,7 +218,7 @@ export class VisionService {
     if (operation === 'stt-azure') {
       // Azure RT STT via WebSocket
       if (audioMediaStream) {
-        this.startRealtimeAzureSTT(stream, audioMediaStream);
+        this.startRealtimeAzureSTTViaScriptProcessor(stream, audioMediaStream);
       } else {
         console.error(`[VisionService] No audio source available for Azure STT for stream: ${stream}. Cannot start STT.`);
       }
@@ -237,7 +254,9 @@ export class VisionService {
    * Starts real-time Speech-to-Text using Azure, streaming audio via WebSocket.
    */
   startRealtimeAzureSTT(stream: string, audioStream: MediaStream): void {
+   
     console.log(`[VisionService] Starting Azure STT for ${stream}.`);
+   
     this.stopOperation(stream); // Stop any existing STT/WebSocket/recorder for this stream
   
     if (!audioStream || audioStream.getAudioTracks().length === 0) {
@@ -251,6 +270,7 @@ export class VisionService {
     });
   
     const socket = new WebSocket(`ws://localhost:5254/ws/azureStt?stream=${encodeURIComponent(stream)}`);
+   
     this.sttSockets[stream] = socket;
   
     socket.onmessage = (event) => {
@@ -299,7 +319,9 @@ export class VisionService {
   
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+       
           console.log(`[VisionService] MediaRecorder.ondataavailable - sending audio chunk (${e.data.size} bytes) for ${stream}.`);
+       
           socket.send(e.data);
         } else {
           console.warn(`[VisionService] MediaRecorder.ondataavailable - skipped (size: ${e.data.size}, socket state: ${socket.readyState})`);
@@ -334,6 +356,75 @@ export class VisionService {
   
     socket.onclose = (event) => {
       console.log(`[VisionService] WebSocket for Azure STT closed for ${stream}. Code: ${event.code}, Reason: ${event.reason}`);
+      this.stopOperation(stream);
+    };
+  }
+  
+  startRealtimeAzureSTTViaScriptProcessor(stream: string, audioStream: MediaStream): void {
+   
+    console.log(`[VisionService] Starting Azure STT (raw PCM) for ${stream} via AudioWorklet.`);
+   
+    this.stopOperation(stream);
+
+    const socket = new WebSocket(`ws://localhost:5254/ws/azureStt?stream=${encodeURIComponent(stream)}`);
+   
+    this.sttSockets[stream] = socket;
+
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.transcript) {
+        this.captions[stream] = data.transcript;
+        console.log(`[VisionService] Azure STT Transcript for ${stream}: ${data.transcript}`);
+      }
+    };
+
+    socket.onopen = async () => {
+      try {
+        const audioContext = new AudioContext({ sampleRate: 16000 });
+        
+        this.audioContexts[stream] = audioContext;
+
+        console.log('Actual AudioContext sampleRate:', audioContext.sampleRate);
+        
+        await audioContext.audioWorklet.addModule('/audio-processor.js');
+
+        const source = audioContext.createMediaStreamSource(audioStream);
+      
+        const workletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
+
+        this.recorders[stream] = workletNode;
+
+        workletNode.port.onmessage = (event) => {
+     
+          const pcmChunk: Uint8Array = event.data;
+     
+          console.log(`[VisionService] Sending PCM chunk: ${pcmChunk.length} bytes`);
+
+          if (socket.readyState === WebSocket.OPEN) {
+         
+            socket.send(pcmChunk);
+
+          }
+        };
+
+        source.connect(workletNode).connect(audioContext.destination);
+       
+        console.log(`[VisionService] AudioWorkletNode started.`);
+      } catch (error) {
+       
+        console.error(`[VisionService] Failed to initialize AudioWorklet for ${stream}:`, error);
+       
+        this.stopOperation(stream);
+      }
+    };
+
+    socket.onerror = (err) => {
+      console.error(`[VisionService] WebSocket error for Azure STT (raw PCM):`, err);
+      this.stopOperation(stream);
+    };
+
+    socket.onclose = () => {
+      console.log(`[VisionService] WebSocket closed for Azure STT (raw PCM).`);
       this.stopOperation(stream);
     };
   }
