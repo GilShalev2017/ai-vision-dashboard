@@ -1,13 +1,18 @@
-import { Component, AfterViewInit, QueryList, ViewChildren, ElementRef } from '@angular/core';
+import { Component, AfterViewInit, QueryList, ViewChildren, ElementRef, OnInit } from '@angular/core';
 import { VisionService } from '../services/vision.service';
+import { FormControl } from '@angular/forms';
+import { Observable, startWith, map } from 'rxjs';
+import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
+import { HttpClient } from '@angular/common/http';
+import { allLanguages } from './allLanguages';
 
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.scss'], 
+  styleUrls: ['./dashboard.component.scss'],
   standalone: false
 })
-export class DashboardComponent implements AfterViewInit {
+export class DashboardComponent implements AfterViewInit, OnInit {
   streams = ['Stream 1', 'Stream 2', 'Stream 3', 'Stream 4'];
 
   @ViewChildren('cameraVideoPlayer') cameraVideoPlayers!: QueryList<ElementRef<HTMLVideoElement>>;
@@ -21,6 +26,10 @@ export class DashboardComponent implements AfterViewInit {
 
   maximizedCardIndex: number | null = null;//track the maximized card
 
+  languageControls: { [stream: string]: FormControl } = {};
+  filteredLanguages: { [stream: string]: Observable<any[]> } = {};
+  allLanguages: any[] = [];
+
   clipNames: Record<string, string> = {
     'Stream 1': 'Laptop Webcam',
     'Stream 2': 'Smartphone Camera',
@@ -28,11 +37,51 @@ export class DashboardComponent implements AfterViewInit {
     'Stream 4': 'Clip 2'
   };
 
-  constructor(public visionService: VisionService) {
+  constructor(private http: HttpClient, public visionService: VisionService) {
     // Initialize input sources to default to file for all streams
     this.streams.forEach(stream => {
       this.visionService.inputSource[stream] = 'file'; // Default to file input for all streams
     });
+  }
+
+  ngOnInit() {
+    // Initialize languages from allLanguages.ts
+    this.allLanguages = allLanguages;
+
+    this.streams.forEach(stream => {
+      this.languageControls[stream] = new FormControl('');
+      this.filteredLanguages[stream] = this.languageControls[stream].valueChanges.pipe(
+        startWith(''),
+        map(value => this.filterLanguages(value || ''))
+      );
+    });
+  }
+
+  private filterLanguages(value: string): any[] {
+    const filterValue = value.toLowerCase();
+    return this.allLanguages.filter(lang =>
+      lang.displayName.toLowerCase().includes(filterValue) ||
+      lang.isocode.toLowerCase().includes(filterValue)
+    );
+  }
+
+  onLanguageSelected(event: MatAutocompleteSelectedEvent, stream: string) {
+    const selected = this.allLanguages.find(l =>
+      `${l.englishName} (${l.azureLocaleCode})` === event.option.value ||
+      l.englishName === event.option.value
+    );
+  
+    if (selected) {
+      this.visionService.setLanguageForStream(stream, selected.azureLocaleCode); // 🔁 Use azureLocaleCode
+      this.languageControls[stream].setValue(`${selected.englishName} (${selected.azureLocaleCode})`, { emitEvent: false });
+    }
+  }
+  
+
+  getSelectedLanguageDisplay(stream: string): string {
+    const code = this.visionService.selectedLanguages[stream];
+    const lang = this.allLanguages.find(l => l.isocode === code || l.azureLocaleCode === code);
+    return lang ? `${lang.englishName} (${lang.azureLocaleCode})` : '';
   }
 
   ngAfterViewInit(): void {
@@ -72,10 +121,10 @@ export class DashboardComponent implements AfterViewInit {
       // Try to get laptop camera device
       for (const device of videoDevices) {
         const label = device.label.toLowerCase();
-        if (label.includes('laptop') || 
-            label.includes('webcam') || 
-            label.includes('front') || 
-            label.includes('internal')) {
+        if (label.includes('laptop') ||
+          label.includes('webcam') ||
+          label.includes('front') ||
+          label.includes('internal')) {
           this.laptopCameraDeviceId = device.deviceId;
           console.log('DashboardComponent: Found laptop camera:', device.label);
           break;
@@ -85,10 +134,10 @@ export class DashboardComponent implements AfterViewInit {
       // Try to get smartphone camera device
       for (const device of videoDevices) {
         const label = device.label.toLowerCase();
-        if (label.includes('mobile') || 
-            label.includes('phone') || 
-            label.includes('back') || 
-            label.includes('external')) {
+        if (label.includes('mobile') ||
+          label.includes('phone') ||
+          label.includes('back') ||
+          label.includes('external')) {
           this.smartphoneCameraDeviceId = device.deviceId;
           console.log('DashboardComponent: Found smartphone camera:', device.label);
           break;
@@ -132,9 +181,9 @@ export class DashboardComponent implements AfterViewInit {
     }
 
     // Initialize Stream 1 with laptop camera if selected
-    if (this.visionService.inputSource['Stream 1'] === 'laptop-camera' && 
-        this.laptopCameraDeviceId && 
-        this.activeLaptopCameraStreamId === null) {
+    if (this.visionService.inputSource['Stream 1'] === 'laptop-camera' &&
+      this.laptopCameraDeviceId &&
+      this.activeLaptopCameraStreamId === null) {
       console.log('DashboardComponent: Starting laptop camera for Stream 1');
       const videoElement = this.cameraVideoPlayers.get(0)?.nativeElement;
       if (videoElement) {
@@ -143,9 +192,9 @@ export class DashboardComponent implements AfterViewInit {
     }
 
     // Initialize Stream 2 with smartphone camera if selected
-    if (this.visionService.inputSource['Stream 2'] === 'smartphone-camera' && 
-        this.smartphoneCameraDeviceId && 
-        this.activeSmartphoneCameraStreamId === null) {
+    if (this.visionService.inputSource['Stream 2'] === 'smartphone-camera' &&
+      this.smartphoneCameraDeviceId &&
+      this.activeSmartphoneCameraStreamId === null) {
       console.log('DashboardComponent: Starting smartphone camera for Stream 2');
       const videoElement = this.cameraVideoPlayers.get(1)?.nativeElement;
       if (videoElement) {
@@ -168,15 +217,15 @@ export class DashboardComponent implements AfterViewInit {
     const videoFileElement = this.videoFilePlayers.get(streamIndex)?.nativeElement;
 
     // Reset current stream's video elements
-    if (cameraVideoElement) { 
-      cameraVideoElement.srcObject = null; 
-      cameraVideoElement.pause(); 
-      cameraVideoElement.load(); 
+    if (cameraVideoElement) {
+      cameraVideoElement.srcObject = null;
+      cameraVideoElement.pause();
+      cameraVideoElement.load();
     }
-    if (videoFileElement) { 
-      videoFileElement.srcObject = null; 
-      videoFileElement.pause(); 
-      videoFileElement.load(); 
+    if (videoFileElement) {
+      videoFileElement.srcObject = null;
+      videoFileElement.pause();
+      videoFileElement.load();
     }
 
     // Update input source
@@ -230,7 +279,7 @@ export class DashboardComponent implements AfterViewInit {
       }
       return;
     }
-  
+
     navigator.mediaDevices.getUserMedia({
       video: { deviceId: { exact: deviceId } },
       audio: true
@@ -258,7 +307,7 @@ export class DashboardComponent implements AfterViewInit {
         videoElement.load();
       });
   }
-  
+
 
   private stopCameraFeed(videoElement: HTMLVideoElement): void {
     if (videoElement.srcObject instanceof MediaStream) {
