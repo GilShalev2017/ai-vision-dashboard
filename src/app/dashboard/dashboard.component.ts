@@ -210,36 +210,31 @@ export class DashboardComponent implements AfterViewInit {
     }
   }
 
-  private startCameraStreamWithRetry(videoElement: HTMLVideoElement, stream: string, deviceId: string, cameraType: 'laptop' | 'smartphone', retries = 3): void {
+  private startCameraStreamWithRetry(
+    videoElement: HTMLVideoElement,
+    stream: string,
+    deviceId: string,
+    cameraType: 'laptop' | 'smartphone',
+    retries = 3
+  ): void {
     if (!videoElement) {
       if (retries > 0) {
         console.log(`DashboardComponent: Video element not found for stream ${stream}, retrying... (${retries} attempts left)`);
         setTimeout(() => {
-          this.startCameraStreamWithRetry(videoElement, stream, deviceId, cameraType, retries - 1);
-        }, 100);
-        return;
+          const streamIndex = this.streams.indexOf(stream);
+          const videoEl = this.cameraVideoPlayers.get(streamIndex)?.nativeElement;
+          this.startCameraStreamWithRetry(videoEl!, stream, deviceId, cameraType, retries - 1);
+        }, 300);
       } else {
-        console.error(`DashboardComponent: Failed to find video element for stream ${stream} after ${3 - retries} retries`);
-        return;
+        console.error(`DashboardComponent: Failed to find video element for stream ${stream} after retries.`);
       }
-    }
-
-    // Check if the video element is ready
-    if (!videoElement.srcObject) {
-      console.log(`DashboardComponent: Video element srcObject is null for stream ${stream}, waiting...`);
-      setTimeout(() => {
-        this.startCameraStreamWithRetry(videoElement, stream, deviceId, cameraType, retries);
-      }, 100);
       return;
     }
-
-    // Stop any existing tracks
-    if (videoElement.srcObject instanceof MediaStream) {
-      videoElement.srcObject.getTracks().forEach(track => track.stop());
-    }
-
-    // Request new media stream
-    navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } }, audio: true })
+  
+    navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: deviceId } },
+      audio: true
+    })
       .then(mediaStream => {
         videoElement.srcObject = mediaStream;
         this.visionService.setMediaStream(stream, mediaStream);
@@ -263,6 +258,7 @@ export class DashboardComponent implements AfterViewInit {
         videoElement.load();
       });
   }
+  
 
   private stopCameraFeed(videoElement: HTMLVideoElement): void {
     if (videoElement.srcObject instanceof MediaStream) {

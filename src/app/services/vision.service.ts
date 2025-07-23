@@ -249,7 +249,7 @@ export class VisionService {
       console.log(`[VisionService]   Azure STT Audio Track: kind=${track.kind}, enabled=${track.enabled}, readyState=${track.readyState}, id=${track.id}`);
     });
 
-    const socket = new WebSocket(`ws://localhost:5254/ws/stt?stream=${encodeURIComponent(stream)}`); // Use ws:// for HTTP
+    const socket = new WebSocket(`ws://localhost:5254/ws/azureStt?stream=${encodeURIComponent(stream)}`); // Use ws:// for HTTP
     this.sttSockets[stream] = socket;
 
     socket.onmessage = (event) => {
