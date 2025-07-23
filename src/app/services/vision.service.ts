@@ -238,20 +238,21 @@ export class VisionService {
    */
   startRealtimeAzureSTT(stream: string, audioStream: MediaStream): void {
     console.log(`[VisionService] Starting Azure STT for ${stream}.`);
-    this.stopOperation(stream); // Ensure previous *processing ops* are stopped before starting new STT
-
-    // Basic check for audio tracks
+    this.stopOperation(stream); // Stop any existing STT/WebSocket/recorder for this stream
+  
     if (!audioStream || audioStream.getAudioTracks().length === 0) {
-      console.error(`[VisionService] Azure STT: No audio tracks found in provided MediaStream for ${stream}. Aborting.`);
+      console.error(`[VisionService] Azure STT: No audio tracks found in MediaStream for ${stream}.`);
       return;
     }
+  
+    // Debug info
     audioStream.getAudioTracks().forEach(track => {
       console.log(`[VisionService]   Azure STT Audio Track: kind=${track.kind}, enabled=${track.enabled}, readyState=${track.readyState}, id=${track.id}`);
     });
-
-    const socket = new WebSocket(`ws://localhost:5254/ws/azureStt?stream=${encodeURIComponent(stream)}`); // Use ws:// for HTTP
+  
+    const socket = new WebSocket(`ws://localhost:5254/ws/azureStt?stream=${encodeURIComponent(stream)}`);
     this.sttSockets[stream] = socket;
-
+  
     socket.onmessage = (event) => {
       console.log(`[VisionService] Azure STT WebSocket message received for ${stream}:`, event.data);
       try {
@@ -264,54 +265,79 @@ export class VisionService {
         console.error(`[VisionService] Error parsing Azure STT WebSocket message for ${stream}:`, e, event.data);
       }
     };
-
+  
     socket.onopen = () => {
       console.log(`[VisionService] WebSocket for Azure STT opened for ${stream}. Initializing MediaRecorder.`);
-      const mimeType = 'audio/webm';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        console.warn(`[VisionService] MIME type '${mimeType}' is not fully supported by this browser for Azure STT. Continuing anyway.`);
+  
+      const supportedMimeTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/ogg',
+        'audio/mp4'
+      ];
+  
+      let selectedMimeType = '';
+      for (const type of supportedMimeTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          selectedMimeType = type;
+          break;
+        }
       }
-
-      const mediaRecorder = new MediaRecorder(audioStream, { mimeType: mimeType }); // webm is commonly supported
+  
+      if (!selectedMimeType) {
+        console.error(`[VisionService] No supported audio MIME types found. Cannot start MediaRecorder.`);
+        return;
+      }
+  
+      console.log(`[VisionService] Using MIME type for MediaRecorder: ${selectedMimeType}`);
+  
+      // Extract audio-only stream
+      const audioOnlyStream = new MediaStream(audioStream.getAudioTracks());
+      const mediaRecorder = new MediaRecorder(audioOnlyStream, { mimeType: selectedMimeType });
       this.recorders[stream] = mediaRecorder;
-
+  
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-          console.log(`[VisionService] MediaRecorder.ondataavailable for Azure STT. Sending audio chunk (${e.data.size} bytes) for ${stream}.`);
-          socket.send(e.data); // Send raw audio blob
-        } else if (e.data.size === 0) {
-          console.warn(`[VisionService] MediaRecorder.ondataavailable received empty blob for Azure STT for ${stream}.`);
+          console.log(`[VisionService] MediaRecorder.ondataavailable - sending audio chunk (${e.data.size} bytes) for ${stream}.`);
+          socket.send(e.data);
         } else {
-          console.warn(`[VisionService] MediaRecorder.ondataavailable for Azure STT: WebSocket not open (state: ${socket.readyState}) for ${stream}.`);
+          console.warn(`[VisionService] MediaRecorder.ondataavailable - skipped (size: ${e.data.size}, socket state: ${socket.readyState})`);
         }
       };
-
+  
       mediaRecorder.onstop = () => {
         console.log(`[VisionService] MediaRecorder stopped for Azure STT for ${stream}.`);
       };
-
+  
       mediaRecorder.onerror = (e) => {
         console.error(`[VisionService] MediaRecorder error for Azure STT for ${stream}:`, e);
-        if (e && (e as any).error) { // Cast to any to access 'error' property
-          console.error(`[VisionService] MediaRecorder specific error object for Azure STT:`, (e as any).error);
+        if ((e as any).error) {
+          console.error(`[VisionService] MediaRecorder specific error object:`, (e as any).error);
         }
         this.stopOperation(stream); // Clean up on error
       };
-
-      mediaRecorder.start(500); // Send audio chunks every 500ms
-      console.log(`[VisionService] MediaRecorder started for Azure STT for ${stream}. State: ${mediaRecorder.state}, interval: 500ms.`);
+  
+      try {
+        mediaRecorder.start(500); // Send audio every 500ms
+        console.log(`[VisionService] MediaRecorder started for Azure STT for ${stream}. State: ${mediaRecorder.state}`);
+      } catch (err) {
+        console.error(`[VisionService] Failed to start MediaRecorder:`, err);
+        this.stopOperation(stream);
+      }
     };
-
+  
     socket.onerror = (error) => {
       console.error(`[VisionService] WebSocket error for Azure STT for ${stream}:`, error);
-      this.stopOperation(stream); // Clean up on error
+      this.stopOperation(stream);
     };
-
+  
     socket.onclose = (event) => {
-      console.log(`[VisionService] WebSocket for Azure STT closed for ${stream}. Code: ${event.code}, Reason: ${event.reason}.`);
-      this.stopOperation(stream); // Clean up on close
+      console.log(`[VisionService] WebSocket for Azure STT closed for ${stream}. Code: ${event.code}, Reason: ${event.reason}`);
+      this.stopOperation(stream);
     };
   }
+  
 
   /**
    * Starts real-time Speech-to-Text using OpenAI, sending audio in chunks via HTTP POST.
@@ -364,8 +390,6 @@ export class VisionService {
     mediaRecorder.start(3000); // every 3 seconds
     console.log(`[VisionService] Recorder started for ${stream}.`);
   }
-  
-
 
   /**
    * Loads a video file into the given HTMLVideoElement and captures its audio stream.
