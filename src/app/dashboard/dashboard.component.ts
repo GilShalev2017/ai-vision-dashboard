@@ -20,7 +20,7 @@ export class DashboardComponent implements AfterViewInit {
   private activeSmartphoneCameraStreamId: string | null = null;
 
   maximizedCardIndex: number | null = null;//track the maximized card
- 
+
   clipNames: Record<string, string> = {
     'Stream 1': 'Laptop Webcam',
     'Stream 2': 'Smartphone Camera',
@@ -37,16 +37,16 @@ export class DashboardComponent implements AfterViewInit {
 
   ngAfterViewInit(): void {
     console.log('DashboardComponent: Starting initialization...');
-    
+
     // First, set up camera devices
     this.setupCameraDevices().then(() => {
       console.log('DashboardComponent: Camera devices setup completed');
-      
+
       // Wait a moment to ensure devices are fully initialized
       setTimeout(() => {
         // Initialize camera streams if devices are available
         this.initializeCameraStreams();
-        
+
         // Subscribe to changes in cameraVideoPlayers
         this.cameraVideoPlayers.changes.subscribe(() => {
           console.log('DashboardComponent: Camera video players changed');
@@ -61,14 +61,14 @@ export class DashboardComponent implements AfterViewInit {
   private async setupCameraDevices(): Promise<void> {
     try {
       console.log('DashboardComponent: Starting camera device setup...');
-      
+
       // Get available camera devices
       const devices = await navigator.mediaDevices.enumerateDevices();
       console.log('DashboardComponent: Found devices:', devices);
-      
+
       const videoDevices = devices.filter(device => device.kind === 'videoinput');
       console.log('DashboardComponent: Found video devices:', videoDevices.length);
-      
+
       // Try to get laptop camera device
       for (const device of videoDevices) {
         const label = device.label.toLowerCase();
@@ -114,7 +114,7 @@ export class DashboardComponent implements AfterViewInit {
 
       // Wait a moment to ensure devices are properly initialized
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
     } catch (error) {
       console.error('DashboardComponent: Error setting up camera devices:', error);
       this.laptopCameraDeviceId = null;
@@ -124,7 +124,7 @@ export class DashboardComponent implements AfterViewInit {
 
   private initializeCameraStreams(): void {
     console.log('DashboardComponent: Initializing camera streams...');
-    
+
     // First check if we have camera device IDs
     if (!this.laptopCameraDeviceId || !this.smartphoneCameraDeviceId) {
       console.log('DashboardComponent: No camera devices available, skipping initialization');
@@ -295,7 +295,7 @@ export class DashboardComponent implements AfterViewInit {
   getOverlay(stream: string) {
     return this.visionService.getOverlay(stream);
   }
-  
+
   getStreamTitle(stream: string): string {
     const inputSourceType = this.visionService.inputSource[stream];
     if (inputSourceType === 'laptop-camera') {
@@ -336,7 +336,7 @@ export class DashboardComponent implements AfterViewInit {
       const videoFilePlayer = this.videoFilePlayers?.find((player, index) => {
         return this.streams[index] === stream;
       });
-      
+
       if (videoFilePlayer && videoFilePlayer.nativeElement.src) {
         // Extract filename from the source URL
         const filename = videoFilePlayer.nativeElement.src.split('/').pop();
@@ -348,7 +348,7 @@ export class DashboardComponent implements AfterViewInit {
     }
     return '';
   }
-  
+
   toggleMaximize(index: number): void {
     if (this.maximizedCardIndex === index) {
       this.maximizedCardIndex = null; // Minimize if already maximized
@@ -364,18 +364,18 @@ export class DashboardComponent implements AfterViewInit {
 
     const videoElement = videoPlayer.nativeElement;
     const fileUrl = URL.createObjectURL(file);
-    
+
     videoElement.src = fileUrl;
     videoElement.load();
     videoElement.play();
 
     // Update the clip name for this stream
     this.clipNames[stream] = file.name;
-    
+
     // Reset the file input for next use
     fileInput.value = '';
   }
-  
+
   triggerFileInput(fileInput: HTMLInputElement, stream: string) {
     // First, set the input source to 'file'
     this.visionService.inputSource[stream] = 'file';
@@ -383,4 +383,3 @@ export class DashboardComponent implements AfterViewInit {
     fileInput.click();
   }
 }
-
