@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of } from 'rxjs'; // Keep if you use Observable.of elsewhere, else remove
+import { Observable, of } from 'rxjs';
 
 // Add type declaration for HTMLMediaElement to include captureStream
 interface HTMLMediaElement {
@@ -15,10 +15,9 @@ export class VisionService {
   private captions: { [key: string]: string } = {};
   private sttSockets: { [key: string]: WebSocket } = {};
   private mediaStreams: { [key: string]: MediaStream } = {}; // To store the active camera/video file MediaStream
-  // FIX: Updated inputSource type to include 'laptop-camera' and 'smartphone-camera'
   public inputSource: Record<string, 'laptop-camera' | 'smartphone-camera' | 'file'> = {};
   public recorders: Record<string, MediaRecorder> = {};
-  private currentOperations: { [key: string]: Set<'stt' | 'stt-openai' | 'translate' | 'faces' | 'ocr'> } = {};
+  private currentOperations: { [key: string]: Set<'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr'> } = {};
 
   constructor(private http: HttpClient) { }
 
@@ -27,6 +26,7 @@ export class VisionService {
    * This stream can come from a camera or a video file.
    */
   setMediaStream(stream: string, mediaStream: MediaStream): void {
+    console.log(`[VisionService] Setting MediaStream for ${stream}:`, mediaStream);
     this.mediaStreams[stream] = mediaStream;
   }
 
@@ -34,35 +34,42 @@ export class VisionService {
    * Retrieves the MediaStream for a given stream ID.
    */
   getMediaStream(stream: string): MediaStream | undefined {
-    return this.mediaStreams[stream];
+    const streamToReturn = this.mediaStreams[stream];
+    console.log(`[VisionService] Getting MediaStream for ${stream}:`, streamToReturn);
+    return streamToReturn;
   }
 
   /**
    * Get the current operations for a stream
    */
-  getCurrentOperations(stream: string): Set<'stt' | 'stt-openai' | 'translate' | 'faces' | 'ocr'> {
-    return this.currentOperations[stream] || new Set();
+  getCurrentOperations(stream: string): Set<'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr'> {
+    const operations = this.currentOperations[stream] || new Set();
+    console.log(`[VisionService] Current operations for ${stream}:`, Array.from(operations));
+    return operations;
   }
 
   /**
    * Add an operation to a stream
    */
-  addOperation(stream: string, operation: 'stt' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): void {
+  addOperation(stream: string, operation: 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): void {
     if (!this.currentOperations[stream]) {
       this.currentOperations[stream] = new Set();
     }
     this.currentOperations[stream].add(operation);
+    console.log(`[VisionService] Added operation '${operation}' to stream '${stream}'. Current operations:`, Array.from(this.currentOperations[stream]));
   }
 
   /**
    * Remove an operation from a stream
    */
-  removeOperation(stream: string, operation: 'stt' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): void {
+  removeOperation(stream: string, operation: 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): void {
     if (this.currentOperations[stream]) {
       this.currentOperations[stream].delete(operation);
+      console.log(`[VisionService] Removed operation '${operation}' from stream '${stream}'. Current operations:`, Array.from(this.currentOperations[stream]));
       // Clean up empty sets
       if (this.currentOperations[stream].size === 0) {
         delete this.currentOperations[stream];
+        console.log(`[VisionService] No operations left for stream '${stream}', clearing.`);
       }
     }
   }
@@ -71,44 +78,79 @@ export class VisionService {
    * Clear all operations for a stream
    */
   clearOperations(stream: string): void {
+    console.log(`[VisionService] Clearing all operation flags for stream '${stream}'.`);
     delete this.currentOperations[stream];
   }
 
   /**
    * Check if a stream has a specific operation active
    */
-  hasOperation(stream: string, operation: 'stt' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): boolean {
+  hasOperation(stream: string, operation: 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): boolean {
     const operations = this.currentOperations[stream];
-    return operations ? operations.has(operation) : false;
+    const hasOp = operations ? operations.has(operation) : false;
+    return hasOp;
   }
 
   /**
-   * Stops all ongoing operations and media tracks for a specific stream.
-   * This is crucial when changing input sources or stopping an active operation.
+   * Stops active MediaRecorder and WebSocket operations for a specific stream.
+   * This does NOT stop the underlying MediaStream tracks (camera/video playback).
    */
   stopOperation(stream: string): void {
-    this.clearOperations(stream);
+    console.log(`[VisionService] Attempting to stop *processing operations* for ${stream}...`);
+    this.clearOperations(stream); // Clear associated operations flags
+
     // Stop any ongoing STT WebSocket operations
     if (this.sttSockets[stream] && this.sttSockets[stream].readyState === WebSocket.OPEN) {
       this.sttSockets[stream].close();
       delete this.sttSockets[stream];
-      console.log(`WebSocket for ${stream} closed.`);
+      console.log(`[VisionService] WebSocket for ${stream} closed.`);
+    } else if (this.sttSockets[stream]) {
+      console.log(`[VisionService] WebSocket for ${stream} not open or already closed, state: ${this.sttSockets[stream].readyState}`);
     }
 
     // Stop any ongoing MediaRecorder operations
     if (this.recorders[stream] && this.recorders[stream].state !== 'inactive') {
       this.recorders[stream].stop();
       delete this.recorders[stream];
-      console.log(`MediaRecorder for ${stream} stopped.`);
+      console.log(`[VisionService] MediaRecorder for ${stream} stopped.`);
+    } else if (this.recorders[stream]) {
+      console.log(`[VisionService] MediaRecorder for ${stream} already inactive or not found, state: ${this.recorders[stream].state}`);
     }
+    console.log(`[VisionService] Finished stopping existing recorders and sockets for ${stream}.`);
+  }
 
-    // Stop camera/video file media tracks (e.g., webcam light off)
+  /**
+   * Stops all MediaStream tracks (e.g., turns off camera, stops video file playback)
+   * and clears the stored MediaStream for a given stream ID.
+   * This should be called when the input source is being changed or explicitly released.
+   */
+  releaseMediaStream(stream: string): void {
+    console.log(`[VisionService] Releasing MediaStream and stopping tracks for ${stream}.`);
+    // First, stop any operations that might be using this stream
+    this.stopOperation(stream);
+
     if (this.mediaStreams[stream]) {
-      this.mediaStreams[stream].getTracks().forEach(track => track.stop());
+      this.mediaStreams[stream].getTracks().forEach(track => {
+        if (track.readyState === 'live') { // Only stop if it's actually active
+          track.stop();
+          console.log(`[VisionService] Stopped MediaStream track: ${track.kind} (${track.id}) for ${stream}.`);
+        } else {
+          console.log(`[VisionService] MediaStream track: ${track.kind} (${track.id}) for ${stream} already stopped/inactive.`);
+        }
+      });
+      // Important: Also revoke the Object URL if it was created for a video file
+      if (this.inputSource[stream] === 'file' && this.mediaStreams[stream].id) {
+        // Find the video element associated with this stream ID if possible
+        // For simplicity, we assume the videoElement.srcObject will be cleaned up
+        // when a new file is loaded or src is set to null/empty string.
+        // If a direct URL.revokeObjectURL is needed, the URL itself would need to be stored.
+      }
       delete this.mediaStreams[stream];
-      console.log(`MediaStream tracks for ${stream} stopped.`);
+      delete this.inputSource[stream]; // Clear the input source type
+      console.log(`[VisionService] MediaStream for ${stream} cleared from service.`);
+    } else {
+      console.log(`[VisionService] No active MediaStream to release for ${stream}.`);
     }
-    console.log(`Stopped all related operations and media for ${stream}.`);
   }
 
   /**
@@ -116,32 +158,52 @@ export class VisionService {
    * It intelligently determines the audio source based on the selected input type.
    */
   invokeOperation(stream: string, operation: string, activeVideoElement: HTMLVideoElement | null): void {
+    console.log(`[VisionService] Invoking operation '${operation}' for stream '${stream}'.`);
     const currentInputSource = this.inputSource[stream];
     let audioMediaStream: MediaStream | null = null;
 
-    // FIX: Check for the new camera input types ('laptop-camera' or 'smartphone-camera')
-    if (currentInputSource === 'laptop-camera' || currentInputSource === 'smartphone-camera') {
-      // For camera, use the stored MediaStream which includes audio
-      audioMediaStream = this.getMediaStream(stream) || null;
-    } else if (currentInputSource === 'file' && activeVideoElement) {
-      // For file, capture audio from the video element playing the file
-      // FIX: Explicitly cast to HTMLMediaElement, as captureStream is defined on it.
+    console.log(`[VisionService] Current input source for ${stream}: ${currentInputSource}`);
+
+    // --- CRITICAL CHANGE HERE ---
+    // Always try to get the already stored MediaStream.
+    // This prevents re-capturing the stream multiple times which can lead to issues.
+    audioMediaStream = this.getMediaStream(stream) || null;
+    console.log(`[VisionService] Retrieved MediaStream from service for ${stream}:`, audioMediaStream);
+
+    // If the input source is a file AND no stream was previously captured/set,
+    // then attempt to capture it NOW. This should ideally only happen once.
+    if (!audioMediaStream && currentInputSource === 'file' && activeVideoElement) {
       const mediaElement = activeVideoElement as HTMLMediaElement;
-      // Check for 'captureStream' property existence and that it's a function
       if (mediaElement && typeof mediaElement.captureStream === 'function') {
-        audioMediaStream = mediaElement.captureStream();
+        const newlyCapturedStream = mediaElement.captureStream();
+        if (newlyCapturedStream) {
+          console.log(`[VisionService] No stored MediaStream, so newly capturing from video element for ${stream}.`);
+          newlyCapturedStream.getTracks().forEach(track => {
+            console.log(`[VisionService]   Newly captured stream track: kind=${track.kind}, enabled=${track.enabled}, readyState=${track.readyState}, id=${track.id}`);
+          });
+          if (newlyCapturedStream.getAudioTracks().length > 0) {
+            this.setMediaStream(stream, newlyCapturedStream); // Store it for future reuse
+            audioMediaStream = newlyCapturedStream;
+            console.log(`[VisionService] Newly captured audio stream successfully set for ${stream}.`);
+          } else {
+            console.warn(`[VisionService] Newly captured MediaStream from video file has no audio tracks for ${stream}. STT operations will not work.`);
+          }
+        } else {
+          console.error(`[VisionService] newly captured captureStream() returned null or undefined for ${stream}.`);
+        }
       } else {
-        console.warn('activeVideoElement.captureStream() is not supported or not a function in this browser for stream:', stream);
-        // Fallback or error handling if captureStream is not available
+        console.warn(`[VisionService] activeVideoElement.captureStream() is not supported or not a function in this browser for stream: ${stream}. Cannot capture audio from video file.`);
       }
+    } else if (!audioMediaStream) {
+      console.warn(`[VisionService] No active video element or unknown input source for stream: ${stream}, and no MediaStream stored.`);
     }
 
-    if (operation === 'stt') {
+    if (operation === 'stt-azure') {
       // Azure RT STT via WebSocket
       if (audioMediaStream) {
-        this.startRealtimeSTT(stream, audioMediaStream);
+        this.startRealtimeAzureSTT(stream, audioMediaStream);
       } else {
-        console.error('No audio source available for Azure STT for stream:', stream);
+        console.error(`[VisionService] No audio source available for Azure STT for stream: ${stream}. Cannot start STT.`);
       }
       return;
     }
@@ -151,7 +213,7 @@ export class VisionService {
       if (audioMediaStream) {
         this.startRealtimeOpenAiSTT(stream, audioMediaStream);
       } else {
-        console.error('No audio source available for OpenAI STT for stream:', stream);
+        console.error(`[VisionService] No audio source available for OpenAI STT for stream: ${stream}. Cannot start STT.`);
       }
       return;
     }
@@ -160,51 +222,93 @@ export class VisionService {
     // You might pass the video stream for visual operations if your backend supports it
     this.http.post(`/api/vision/${operation}`, { stream })
       .subscribe((response: any) => {
+        console.log(`[VisionService] Response from /api/vision/${operation} for ${stream}:`, response);
         if (operation === 'faces') {
           this.overlays[stream] = response.overlays;
+          console.log(`[VisionService] Overlays updated for ${stream}:`, this.overlays[stream]);
         }
         // Add more logic here for translate, ocr responses if needed
       }, error => {
-        console.error(`Error invoking ${operation} for ${stream}:`, error);
+        console.error(`[VisionService] Error invoking ${operation} for ${stream}:`, error);
       });
   }
 
   /**
    * Starts real-time Speech-to-Text using Azure, streaming audio via WebSocket.
    */
-  startRealtimeSTT(stream: string, audioStream: MediaStream): void {
-    this.stopOperation(stream); // Ensure previous ops are stopped before starting new STT
+  startRealtimeAzureSTT(stream: string, audioStream: MediaStream): void {
+    console.log(`[VisionService] Starting Azure STT for ${stream}.`);
+    this.stopOperation(stream); // Ensure previous *processing ops* are stopped before starting new STT
+
+    // Basic check for audio tracks
+    if (!audioStream || audioStream.getAudioTracks().length === 0) {
+      console.error(`[VisionService] Azure STT: No audio tracks found in provided MediaStream for ${stream}. Aborting.`);
+      return;
+    }
+    audioStream.getAudioTracks().forEach(track => {
+      console.log(`[VisionService]   Azure STT Audio Track: kind=${track.kind}, enabled=${track.enabled}, readyState=${track.readyState}, id=${track.id}`);
+    });
 
     const socket = new WebSocket(`ws://localhost:5254/ws/stt?stream=${encodeURIComponent(stream)}`); // Use ws:// for HTTP
     this.sttSockets[stream] = socket;
 
     socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.transcript) {
-        this.captions[stream] = data.transcript;
+      console.log(`[VisionService] Azure STT WebSocket message received for ${stream}:`, event.data);
+      try {
+        const data = JSON.parse(event.data);
+        if (data.transcript) {
+          this.captions[stream] = data.transcript;
+          console.log(`[VisionService] Azure STT Transcript for ${stream}: ${data.transcript}`);
+        }
+      } catch (e) {
+        console.error(`[VisionService] Error parsing Azure STT WebSocket message for ${stream}:`, e, event.data);
       }
     };
 
     socket.onopen = () => {
-      console.log(`WebSocket for Azure STT opened for ${stream}. Starting MediaRecorder.`);
-      const mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' }); // webm is commonly supported
+      console.log(`[VisionService] WebSocket for Azure STT opened for ${stream}. Initializing MediaRecorder.`);
+      const mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        console.warn(`[VisionService] MIME type '${mimeType}' is not fully supported by this browser for Azure STT. Continuing anyway.`);
+      }
+
+      const mediaRecorder = new MediaRecorder(audioStream, { mimeType: mimeType }); // webm is commonly supported
       this.recorders[stream] = mediaRecorder;
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+          console.log(`[VisionService] MediaRecorder.ondataavailable for Azure STT. Sending audio chunk (${e.data.size} bytes) for ${stream}.`);
           socket.send(e.data); // Send raw audio blob
+        } else if (e.data.size === 0) {
+          console.warn(`[VisionService] MediaRecorder.ondataavailable received empty blob for Azure STT for ${stream}.`);
+        } else {
+          console.warn(`[VisionService] MediaRecorder.ondataavailable for Azure STT: WebSocket not open (state: ${socket.readyState}) for ${stream}.`);
         }
       };
+
+      mediaRecorder.onstop = () => {
+        console.log(`[VisionService] MediaRecorder stopped for Azure STT for ${stream}.`);
+      };
+
+      mediaRecorder.onerror = (e) => {
+        console.error(`[VisionService] MediaRecorder error for Azure STT for ${stream}:`, e);
+        if (e && (e as any).error) { // Cast to any to access 'error' property
+          console.error(`[VisionService] MediaRecorder specific error object for Azure STT:`, (e as any).error);
+        }
+        this.stopOperation(stream); // Clean up on error
+      };
+
       mediaRecorder.start(500); // Send audio chunks every 500ms
+      console.log(`[VisionService] MediaRecorder started for Azure STT for ${stream}. State: ${mediaRecorder.state}, interval: 500ms.`);
     };
 
     socket.onerror = (error) => {
-      console.error('WebSocket error for Azure STT:', error);
+      console.error(`[VisionService] WebSocket error for Azure STT for ${stream}:`, error);
       this.stopOperation(stream); // Clean up on error
     };
 
-    socket.onclose = () => {
-      console.log(`WebSocket for Azure STT closed for ${stream}.`);
+    socket.onclose = (event) => {
+      console.log(`[VisionService] WebSocket for Azure STT closed for ${stream}. Code: ${event.code}, Reason: ${event.reason}.`);
       this.stopOperation(stream); // Clean up on close
     };
   }
@@ -213,67 +317,120 @@ export class VisionService {
    * Starts real-time Speech-to-Text using OpenAI, sending audio in chunks via HTTP POST.
    */
   startRealtimeOpenAiSTT(stream: string, audioStream: MediaStream): void {
-    this.stopOperation(stream); // Ensure previous ops are stopped before starting new STT
-
-    const mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' }); // Use webm for broader browser support
+    console.log(`[VisionService] Starting OpenAI STT for ${stream}.`);
+    this.stopOperation(stream);
+  
+    if (!audioStream || audioStream.getAudioTracks().length === 0) {
+      console.error(`[VisionService] No audio tracks found for ${stream}.`);
+      return;
+    }
+  
+    const onlyAudioStream = new MediaStream(audioStream.getAudioTracks());
+    const mimeType = 'audio/webm;codecs=opus';
+  
+    const mediaRecorder = MediaRecorder.isTypeSupported(mimeType)
+      ? new MediaRecorder(onlyAudioStream, { mimeType })
+      : new MediaRecorder(onlyAudioStream); // fallback
+  
     this.recorders[stream] = mediaRecorder;
-
+  
     mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        const blob = e.data;
+      if (e.data.size > 1000) {
+        const finalizedBlob = new Blob([e.data], { type: 'audio/webm' });
+  
+        console.log(`[VisionService] Blob type: ${finalizedBlob.type}, size: ${finalizedBlob.size}`);
+  
         const formData = new FormData();
-        formData.append("audio", blob, "clip.wav"); // Send as WAV for OpenAI
-
-        this.http.post<any>(`/api/vision/stt-openai?stream=${stream}`, formData).subscribe(resp => {
+        formData.append("file", finalizedBlob, "clip.webm");
+  
+        this.http.post<any>(
+          `http://localhost:5254/api/vision/openAiStt?stream=${encodeURIComponent(stream)}`,
+          formData
+        ).subscribe(resp => {
           if (resp.transcript) {
             this.captions[stream] = resp.transcript;
+            console.log(`[VisionService] Transcript for ${stream}: ${resp.transcript}`);
+          } else {
+            console.warn(`[VisionService] No transcript in response:`, resp);
           }
         }, error => {
-          console.error('Error sending audio to OpenAI STT:', error);
-          // Optionally, stop the recorder on continuous errors
+          console.error(`[VisionService] Error posting to STT:`, error);
         });
+      } else {
+        console.warn(`[VisionService] Empty blob for ${stream}.`);
       }
     };
-
-    mediaRecorder.onstop = () => {
-      console.log(`OpenAI STT recorder stopped for ${stream}.`);
-    };
-
-    mediaRecorder.start(3000); // Collect 3-second chunks for OpenAI (adjust as needed)
-    console.log(`OpenAI STT recorder started for ${stream}.`);
+  
+    mediaRecorder.start(3000); // every 3 seconds
+    console.log(`[VisionService] Recorder started for ${stream}.`);
   }
+  
 
 
   /**
    * Loads a video file into the given HTMLVideoElement and captures its audio stream.
    */
   loadVideoFile(event: Event, stream: string, videoElement: HTMLVideoElement): void {
+    console.log(`[VisionService] Attempting to load video file for stream: ${stream}.`);
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) {
-      console.warn('No file selected for stream:', stream);
+      console.warn(`[VisionService] No file selected for stream: ${stream}. Aborting loadVideoFile.`);
       return;
     }
+    console.log(`[VisionService] File selected: ${file.name} (${file.type}, ${file.size} bytes) for stream: ${stream}.`);
 
-    // Stop any current operations or media streams for this stream before loading new file
-    this.stopOperation(stream);
+    // **IMPORTANT CHANGE:** Call releaseMediaStream to stop any previous video/camera stream
+    // associated with this stream ID before loading a new one.
+    this.releaseMediaStream(stream);
+    this.inputSource[stream] = 'file'; // Set the input source type immediately
 
     // Set the video source to the selected file
     videoElement.srcObject = null; // Clear any previous camera stream
     videoElement.src = URL.createObjectURL(file);
     videoElement.load(); // Load the new video file
-    videoElement.play().catch(e => console.error("Error playing video:", e));
+    videoElement.muted = false; // Ensure it's not muted, as captureStream might be affected by it
+    console.log(`[VisionService] Video element src set to object URL for ${stream}.`);
 
-    // Capture the audio stream from the video element
-    // FIX: Explicitly cast to HTMLMediaElement, as captureStream is defined on it.
-    const mediaElement = videoElement as HTMLMediaElement;
-    if (mediaElement && typeof mediaElement.captureStream === 'function') {
-      this.setMediaStream(stream, mediaElement.captureStream());
-      console.log(`Audio stream captured from video file for ${stream}.`);
-    } else {
-      console.warn('HTMLMediaElement.captureStream() is not supported or not a function in this browser. Cannot capture audio from video file for stream:', stream);
-      // Implement a fallback here if captureStream is critical and not supported:
-      // E.g., using Web Audio API to process audio from the video, or instructing the user.
-    }
+    videoElement.onloadedmetadata = () => {
+      console.log(`[VisionService] Video loaded metadata for ${stream}. Dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}, Duration: ${videoElement.duration}s.`);
+      videoElement.play().catch(e => console.error(`[VisionService] Error playing video for ${stream}:`, e));
+    };
+
+    videoElement.onplay = () => {
+      console.log(`[VisionService] Video started playing for ${stream}.`);
+      // Capture the audio stream from the video element AFTER it starts playing
+      const mediaElement = videoElement as HTMLMediaElement;
+      if (mediaElement && typeof mediaElement.captureStream === 'function') {
+        const capturedStream = mediaElement.captureStream();
+        if (capturedStream) {
+          console.log(`[VisionService] Successfully captured MediaStream from video element for ${stream}.`);
+          capturedStream.getTracks().forEach(track => {
+            console.log(`[VisionService]   Captured stream track: kind=${track.kind}, enabled=${track.enabled}, readyState=${track.readyState}, id=${track.id}`);
+          });
+          if (capturedStream.getAudioTracks().length > 0) {
+            this.setMediaStream(stream, capturedStream);
+            console.log(`[VisionService] Audio stream successfully captured and set for ${stream}.`);
+          } else {
+            console.warn(`[VisionService] Captured stream from video file for ${stream} has no audio tracks. STT operations will not work.`);
+            // You might want to provide user feedback here
+          }
+        } else {
+          console.error(`[VisionService] captureStream() returned null or undefined for ${stream}.`);
+        }
+      } else {
+        console.warn(`[VisionService] HTMLMediaElement.captureStream() is not supported or not a function in this browser for stream: ${stream}. Cannot capture audio from video file.`);
+        // Implement a fallback here if captureStream is critical and not supported:
+        // E.g., using Web Audio API to process audio from the video, or instructing the user.
+      }
+    };
+
+    videoElement.onerror = (e) => {
+      console.error(`[VisionService] Error loading or playing video for ${stream}:`, e);
+      // Access more specific error info if available, e.g., videoElement.error
+      if (videoElement.error) {
+        console.error(`[VisionService] HTMLMediaElement error object for ${stream}: code=${videoElement.error.code}, message=${videoElement.error.message}`);
+      }
+    };
   }
 
   getOverlay(stream: string) {
@@ -283,14 +440,4 @@ export class VisionService {
   getCaptions(stream: string) {
     return this.captions[stream] || '';
   }
-
-  // This function is no longer needed as invokeOperation routes to startRealtimeOpenAiSTT
-  // private convertFloat32ToInt16(buffer: Float32Array): ArrayBuffer {
-  //   const l = buffer.length;
-  //   const buf = new Int16Array(l);
-  //   for (let i = 0; i < l; i++) {
-  //     buf[i] = Math.min(1, buffer[i]) * 0x7fff;
-  //   }
-  //   return buf.buffer;
-  // }
 }

@@ -45,6 +45,7 @@
               *ngIf="visionService.inputSource[stream] === 'laptop-camera' || visionService.inputSource[stream] === 'smartphone-camera'">
               <video #cameraVideoPlayer [id]="'camera-video-player-' + i" autoplay muted playsinline></video>
             </ng-container>
+
             <div class="overlay" *ngFor="let face of getOverlay(stream)">
               <div class="face-rect"
                 [ngStyle]="{ left: face.x + 'px', top: face.y + 'px', width: face.w + 'px', height: face.h + 'px' }">
@@ -52,6 +53,7 @@
               </div>
             </div>
             <div class="captions">
+              {{ getInputName(stream) }}
               {{ getCaptions(stream) }}
             </div>
           </div>
@@ -63,9 +65,9 @@
                 matTooltip="Transcribe (OpenAI)">
                 <mat-icon>record_voice_over</mat-icon>
               </mat-chip-option>
-              <mat-chip-option (click)="startOperation(stream, 'stt')"
-                [selected]="visionService.hasOperation(stream, 'stt')"
-                [color]="visionService.hasOperation(stream, 'stt') ? 'primary' : 'default'"
+              <mat-chip-option (click)="startOperation(stream, 'stt-azure')"
+                [selected]="visionService.hasOperation(stream, 'stt-azure')"
+                [color]="visionService.hasOperation(stream, 'stt-azure') ? 'primary' : 'default'"
                 matTooltip="Transcribe (Azure)">
                 <mat-icon>settings_voice</mat-icon>
               </mat-chip-option>
@@ -94,14 +96,19 @@
               <mat-icon>more_vert</mat-icon> </button>
             <mat-menu #inputSourceMenuGrid="matMenu">
               <ng-template matMenuContent let-currentStream="currentStream" let-currentFileInput="currentFileInput">
-                <button mat-menu-item
-                  (click)="onInputSourceChange(currentStream, (currentStream === 'Stream 1' ? 'laptop-camera' : 'smartphone-camera'))"
-                  [disabled]="(currentStream === 'Stream 1' && !laptopCameraDeviceId) || (currentStream === 'Stream 2' && !smartphoneCameraDeviceId)">
-                  Camera Feed
-                </button>
-                <button mat-menu-item (click)="triggerFileInput(currentFileInput, currentStream)">
-                  Video File Feed
-                </button>
+                <mat-button-toggle-group>
+                  <mat-button-toggle
+                    (click)="onInputSourceChange(currentStream, (currentStream === 'Stream 1' ? 'laptop-camera' : 'smartphone-camera'))"
+                    [disabled]="(currentStream === 'Stream 1' && !laptopCameraDeviceId) || (currentStream === 'Stream 2' && !smartphoneCameraDeviceId)"
+                    [checked]="visionService.inputSource[currentStream] === (currentStream === 'Stream 1' ? 'laptop-camera' : 'smartphone-camera')">
+                    Camera Feed
+                  </mat-button-toggle>
+                  <mat-button-toggle 
+                    (click)="triggerFileInput(currentFileInput, currentStream)"
+                    [checked]="visionService.inputSource[currentStream] === 'file'">
+                    Video File Feed
+                  </mat-button-toggle>
+                </mat-button-toggle-group>
               </ng-template>
             </mat-menu>
           </mat-card-actions>
