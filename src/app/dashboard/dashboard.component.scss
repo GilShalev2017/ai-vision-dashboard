@@ -10,6 +10,8 @@
 
 .video-wrapper {
     position: relative;
+  
+    display: inline-block;
 }
 
 video {
@@ -240,6 +242,10 @@ mat-grid-list {
 
     .video-wrapper {
         position: relative;
+
+  
+        display: inline-block;
+
         flex-grow: 1; // Takes up remaining space in the card
         display: flex;
         flex-direction: column;
@@ -629,4 +635,37 @@ mat-grid-list {
 // Button alignment
 .align-right {
     margin-left: auto;
+}
+
+
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+}
+
+.face-rect {
+    position: absolute;
+    border: 2px solid #00e5ff;
+    border-radius: 4px;
+    box-shadow: 0 0 8px #00e5ff;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    background-color: rgba(0, 0, 0, 0.6);
+    padding: 1px 5px;
+    z-index: 2;
+}
+
+.face-rect .label {
+    position: absolute;
+    top: -18px;
+    left: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 1px 5px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 2px;
+    color: #00e5ff;
 }

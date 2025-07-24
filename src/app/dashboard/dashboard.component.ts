@@ -328,12 +328,12 @@ export class DashboardComponent implements AfterViewInit, OnInit {
     }
 
     // Add the operation to the stream
-    this.visionService.addOperation(stream, operation as 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr');
+    this.visionService.addOperation(stream, operation as 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr' | 'alpr');
     this.visionService.invokeOperation(stream, operation, activeVideoElement);
   }
 
   stopOperation(stream: string, operation: string): void {
-    this.visionService.removeOperation(stream, operation as 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr');
+    this.visionService.removeOperation(stream, operation as 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr' | 'alpr');
     // You might want to add logic here to stop the actual operation if needed
   }
 

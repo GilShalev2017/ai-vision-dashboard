@@ -16,25 +16,25 @@ export class VisionService {
   private mediaStreams: { [key: string]: MediaStream } = {}; // To store the active camera/video file MediaStream
   public inputSource: Record<string, 'laptop-camera' | 'smartphone-camera' | 'file'> = {};
   public recorders: Record<string, MediaRecorder | AudioWorkletNode> = {};
-  private currentOperations: { [key: string]: Set<'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr'> } = {};
+  private currentOperations: { [key: string]: Set<'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr' | 'alpr'> } = {};
   recognitionLanguages: { [stream: string]: string } = {};
-  private audioContexts: Record<string, AudioContext> = {};
-  
-  constructor(private http: HttpClient) {
-  }
-
   public selectedLanguages: { [stream: string]: string } = {};
+  private audioContexts: Record<string, AudioContext> = {};
+  private alprSockets: Record<string, WebSocket> = {};
+  private alprIntervals: Record<string, any> = {};
+
+  constructor(private http: HttpClient) {}
 
   setLanguageForStream(stream: string, isocode: string) {
     this.selectedLanguages[stream] = isocode;
   }
-  
+
   getLanguageForStream(stream: string): string {
     const isocode = this.selectedLanguages[stream];
     const match = allLanguages.find(lang => lang.isocode === isocode || lang.azureLocaleCode === isocode);
     return match?.azureLocaleCode || 'en-US';
   }
-  
+
   /**
    * Stores the MediaStream associated with a given stream ID.
    * This stream can come from a camera or a video file.
@@ -56,7 +56,7 @@ export class VisionService {
   /**
    * Get the current operations for a stream
    */
-  getCurrentOperations(stream: string): Set<'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr'> {
+  getCurrentOperations(stream: string): Set<'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr' | 'alpr'> {
     const operations = this.currentOperations[stream] || new Set();
     console.log(`[VisionService] Current operations for ${stream}:`, Array.from(operations));
     return operations;
@@ -65,7 +65,7 @@ export class VisionService {
   /**
    * Add an operation to a stream
    */
-  addOperation(stream: string, operation: 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): void {
+  addOperation(stream: string, operation: 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr' | 'alpr'): void {
     if (!this.currentOperations[stream]) {
       this.currentOperations[stream] = new Set();
     }
@@ -76,7 +76,7 @@ export class VisionService {
   /**
    * Remove an operation from a stream
    */
-  removeOperation(stream: string, operation: 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): void {
+  removeOperation(stream: string, operation: 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr' | 'alpr'): void {
     if (this.currentOperations[stream]) {
       this.currentOperations[stream].delete(operation);
       console.log(`[VisionService] Removed operation '${operation}' from stream '${stream}'. Current operations:`, Array.from(this.currentOperations[stream]));
@@ -99,7 +99,7 @@ export class VisionService {
   /**
    * Check if a stream has a specific operation active
    */
-  hasOperation(stream: string, operation: 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr'): boolean {
+  hasOperation(stream: string, operation: 'stt-azure' | 'stt-openai' | 'translate' | 'faces' | 'ocr' | 'alpr' ): boolean {
     const operations = this.currentOperations[stream];
     const hasOp = operations ? operations.has(operation) : false;
     return hasOp;
@@ -185,7 +185,7 @@ export class VisionService {
   }
 
   /**
-   * Invokes a specific operation (STT, Translate, Faces, OCR) for a given stream.
+   * Invokes a specific operation (STT, Translate, Faces, OCR, ALPR) for a given stream.
    * It intelligently determines the audio source based on the selected input type.
    */
   invokeOperation(stream: string, operation: string, activeVideoElement: HTMLVideoElement | null): void {
@@ -249,21 +249,95 @@ export class VisionService {
       return;
     }
 
-    // For other operations (faces, translate, ocr) that might not need the audio stream directly
-    // You might pass the video stream for visual operations if your backend supports it
-    this.http.post(`/api/vision/${operation}`, { stream })
-      .subscribe((response: any) => {
-        console.log(`[VisionService] Response from /api/vision/${operation} for ${stream}:`, response);
-        if (operation === 'faces') {
-          this.overlays[stream] = response.overlays;
-          console.log(`[VisionService] Overlays updated for ${stream}:`, this.overlays[stream]);
-        }
-        // Add more logic here for translate, ocr responses if needed
-      }, error => {
-        console.error(`[VisionService] Error invoking ${operation} for ${stream}:`, error);
-      });
+    if (operation === 'alpr') {
+      if (activeVideoElement) {
+        this.startAlprSocket(stream, activeVideoElement);
+      }
+    }
   }
 
+  convertBlobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string).split(',')[1]); // remove data:image/jpeg;base64,...
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  
+  startAlprSocket(stream: string, video: HTMLVideoElement): void {
+    // 🛑 Stop any existing socket or interval for this stream before starting a new one
+    this.stopAlprSocket(stream);
+  
+    const socket = new WebSocket(`ws://localhost:5254/ws/alpr?stream=${encodeURIComponent(stream)}`);
+    this.alprSockets[stream] = socket;
+  
+    socket.onmessage = (msg) => {
+      const data = JSON.parse(msg.data);
+      this.handleAlprResult(stream, video, data);
+      // const result = JSON.parse(msg.data);
+      // this.overlays[stream] = result.overlays || [];
+      //console.log(`[ALPR] Result for ${stream}:`, result);
+    };
+  
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    const FPS = 3;
+  
+    const sendFrame = async () => {
+      if (
+        socket.readyState !== WebSocket.OPEN ||
+        video.paused ||
+        video.ended ||
+        video.videoWidth === 0 ||
+        video.videoHeight === 0
+      ) return;
+  
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          const base64Data = await this.convertBlobToBase64(blob);
+          const message = {
+            stream,
+            data: base64Data
+          };
+          socket.send(JSON.stringify(message));
+        }
+      }, 'image/jpeg', 0.85);
+    };
+  
+    socket.onopen = () => {
+      console.log(`[ALPR] Socket opened for ${stream}.`);
+      this.alprIntervals[stream] = setInterval(sendFrame, 1000 / FPS);
+    };
+  
+    socket.onclose = () => {
+      console.log(`[ALPR] Socket closed for ${stream}.`);
+      this.stopAlprSocket(stream);
+    };
+  
+    socket.onerror = (err) => {
+      console.error(`[ALPR] WebSocket error for ${stream}:`, err);
+      this.stopAlprSocket(stream);
+    };
+  }
+  
+  stopAlprSocket(stream: string): void {
+    const socket = this.alprSockets[stream];
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.close();
+    }
+    if (this.alprIntervals[stream]) {
+      clearInterval(this.alprIntervals[stream]);
+      delete this.alprIntervals[stream];
+    }
+    delete this.alprSockets[stream];
+  }
+
+  
   startRealtimeAzureSTTViaScriptProcessor(stream: string, audioStream: MediaStream): void {
 
     console.log(`[VisionService] Starting Azure STT (raw PCM) for ${stream} via AudioWorklet.`);
@@ -458,6 +532,40 @@ export class VisionService {
     return this.overlays[stream] || [];
   }
 
+  private handleAlprResult(stream: string, videoElement: HTMLVideoElement, data: any) {
+    const originalWidth = data.originalWidth;
+    const originalHeight = data.originalHeight;
+    const overlays = data.overlays || [];
+  
+    if (!originalWidth || !originalHeight) {
+      console.warn('[ALPR] Missing original video dimensions.');
+      return;
+    }
+  
+    const rect = videoElement.getBoundingClientRect(); // visible size in layout
+    const renderedWidth = rect.width;
+    const renderedHeight = rect.height;
+  
+    if (!renderedWidth || !renderedHeight) {
+      console.warn('[ALPR] Could not determine rendered video size.');
+      return;
+    }
+  
+    const scaleX = renderedWidth / originalWidth;
+    const scaleY = renderedHeight / originalHeight;
+  
+    const scaledOverlays = overlays.map((overlay: any) => ({
+      label: overlay.label,
+      x: overlay.x * scaleX,
+      y: overlay.y * scaleY,
+      w: overlay.w * scaleX,
+      h: overlay.h * scaleY
+    }));
+  
+    this.overlays[stream] = scaledOverlays;
+  }
+ 
+  
   getCaptions(stream: string) {
     return this.captions[stream] || '';
   }
@@ -466,113 +574,3 @@ export class VisionService {
     this.recognitionLanguages[stream] = langCode;
   }
 }
-
-  /**
-   * Starts real-time Speech-to-Text using Azure, streaming audio via WebSocket.
-   */
-  // startRealtimeAzureSTT(stream: string, audioStream: MediaStream, language: string): void {
-
-  //   console.log(`[VisionService] Starting Azure STT for ${stream}.`);
-
-  //   this.stopOperation(stream); // Stop any existing STT/WebSocket/recorder for this stream
-
-  //   if (!audioStream || audioStream.getAudioTracks().length === 0) {
-  //     console.error(`[VisionService] Azure STT: No audio tracks found in MediaStream for ${stream}.`);
-  //     return;
-  //   }
-
-  //   // Debug info
-  //   audioStream.getAudioTracks().forEach(track => {
-  //     console.log(`[VisionService]   Azure STT Audio Track: kind=${track.kind}, enabled=${track.enabled}, readyState=${track.readyState}, id=${track.id}`);
-  //   });
-
-  //   const socket = new WebSocket(`ws://localhost:5254/ws/azureStt?stream=${encodeURIComponent(stream)}`);
-
-  //   this.sttSockets[stream] = socket;
-
-  //   socket.onmessage = (event) => {
-  //     console.log(`[VisionService] Azure STT WebSocket message received for ${stream}:`, event.data);
-  //     try {
-  //       const data = JSON.parse(event.data);
-  //       if (data.transcript) {
-  //         this.captions[stream] = data.transcript;
-  //         console.log(`[VisionService] Azure STT Transcript for ${stream}: ${data.transcript}`);
-  //       }
-  //     } catch (e) {
-  //       console.error(`[VisionService] Error parsing Azure STT WebSocket message for ${stream}:`, e, event.data);
-  //     }
-  //   };
-
-  //   socket.onopen = () => {
-  //     console.log(`[VisionService] WebSocket for Azure STT opened for ${stream}. Initializing MediaRecorder.`);
-
-  //     const supportedMimeTypes = [
-  //       'audio/webm;codecs=opus',
-  //       'audio/webm',
-  //       'audio/ogg;codecs=opus',
-  //       'audio/ogg',
-  //       'audio/mp4'
-  //     ];
-
-  //     let selectedMimeType = '';
-  //     for (const type of supportedMimeTypes) {
-  //       if (MediaRecorder.isTypeSupported(type)) {
-  //         selectedMimeType = type;
-  //         break;
-  //       }
-  //     }
-
-  //     if (!selectedMimeType) {
-  //       console.error(`[VisionService] No supported audio MIME types found. Cannot start MediaRecorder.`);
-  //       return;
-  //     }
-
-  //     console.log(`[VisionService] Using MIME type for MediaRecorder: ${selectedMimeType}`);
-
-  //     // Extract audio-only stream
-  //     const audioOnlyStream = new MediaStream(audioStream.getAudioTracks());
-  //     const mediaRecorder = new MediaRecorder(audioOnlyStream, { mimeType: selectedMimeType });
-  //     this.recorders[stream] = mediaRecorder;
-
-  //     mediaRecorder.ondataavailable = (e) => {
-  //       if (e.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-
-  //         console.log(`[VisionService] MediaRecorder.ondataavailable - sending audio chunk (${e.data.size} bytes) for ${stream}.`);
-
-  //         socket.send(e.data);
-  //       } else {
-  //         console.warn(`[VisionService] MediaRecorder.ondataavailable - skipped (size: ${e.data.size}, socket state: ${socket.readyState})`);
-  //       }
-  //     };
-
-  //     mediaRecorder.onstop = () => {
-  //       console.log(`[VisionService] MediaRecorder stopped for Azure STT for ${stream}.`);
-  //     };
-
-  //     mediaRecorder.onerror = (e) => {
-  //       console.error(`[VisionService] MediaRecorder error for Azure STT for ${stream}:`, e);
-  //       if ((e as any).error) {
-  //         console.error(`[VisionService] MediaRecorder specific error object:`, (e as any).error);
-  //       }
-  //       this.stopOperation(stream); // Clean up on error
-  //     };
-
-  //     try {
-  //       mediaRecorder.start(500); // Send audio every 500ms
-  //       console.log(`[VisionService] MediaRecorder started for Azure STT for ${stream}. State: ${mediaRecorder.state}`);
-  //     } catch (err) {
-  //       console.error(`[VisionService] Failed to start MediaRecorder:`, err);
-  //       this.stopOperation(stream);
-  //     }
-  //   };
-
-  //   socket.onerror = (error) => {
-  //     console.error(`[VisionService] WebSocket error for Azure STT for ${stream}:`, error);
-  //     this.stopOperation(stream);
-  //   };
-
-  //   socket.onclose = (event) => {
-  //     console.log(`[VisionService] WebSocket for Azure STT closed for ${stream}. Code: ${event.code}, Reason: ${event.reason}`);
-  //     this.stopOperation(stream);
-  //   };
-  // }
