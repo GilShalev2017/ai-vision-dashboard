@@ -17,6 +17,8 @@
 video {
     width: 100%;
     height: auto;
+
+    display: block;
 }
 
 .overlay {
@@ -253,7 +255,7 @@ mat-grid-list {
         justify-content: center;
         background-color: #000; // Black background for video area
         overflow: hidden; // Ensure video stays within bounds
-        height: 250px; // Set fixed height
+        height: 366px;//250px; // Set fixed height
 
         video {
             width: 100%;
@@ -480,7 +482,6 @@ mat-grid-list {
         object-fit: contain; // Ensure video fits within the wrapper without cropping
     }
 }
-
 
 // Sidebar styling
 .sidebar {

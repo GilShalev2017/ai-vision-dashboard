@@ -23,7 +23,8 @@
             <div class="card-header">
               <div class="card-title-group">
                 <i class="icon" [ngClass]="getStreamIcon(stream)"></i>
-                <span class="title-text">{{ getStreamTitle(stream) }}</span>
+                <span class="title-text">{{ streamTitles[stream] }}</span>
+                <span style="margin-left: 10px; color: yellow;">{{ visionService.inputNames[stream] }}</span>
               </div>
               <div class="card-actions-top">
                 <i class="fas fa-bell card-icon"></i>
@@ -54,8 +55,8 @@
               </div>
             </div>
             <div class="captions">
-              {{ getInputName(stream) }}
-              {{ getCaptions(stream) }}
+              <!-- {{ visionService.inputNames[stream] }} -->
+              {{ visionService.getCaptions(stream) }}
             </div>
           </div>
           <mat-card-actions>

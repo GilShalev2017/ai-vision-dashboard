@@ -30,6 +30,14 @@ export class DashboardComponent implements AfterViewInit, OnInit {
   filteredLanguages: { [stream: string]: Observable<any[]> } = {};
   allLanguages: any[] = [];
 
+  streamTitles: Record<string, string> = {
+    'Stream 1': 'Laptop Webcam',
+    'Stream 2': 'Smartphone Camera',
+    'Stream 3': 'Clip 1',
+    'Stream 4': 'Clip 2'
+  };
+
+
   clipNames: Record<string, string> = {
     'Stream 1': 'Laptop Webcam',
     'Stream 2': 'Smartphone Camera',
@@ -70,13 +78,12 @@ export class DashboardComponent implements AfterViewInit, OnInit {
       `${l.englishName} (${l.azureLocaleCode})` === event.option.value ||
       l.englishName === event.option.value
     );
-  
+
     if (selected) {
       this.visionService.setLanguageForStream(stream, selected.azureLocaleCode); // 🔁 Use azureLocaleCode
       this.languageControls[stream].setValue(`${selected.englishName} (${selected.azureLocaleCode})`, { emitEvent: false });
     }
   }
-  
 
   getSelectedLanguageDisplay(stream: string): string {
     const code = this.visionService.selectedLanguages[stream];
@@ -209,14 +216,14 @@ export class DashboardComponent implements AfterViewInit, OnInit {
       console.warn(`Stream ${stream} not found.`);
       return;
     }
-
+  
     this.visionService.stopOperation(stream);
-
+  
     // Get video elements
     const cameraVideoElement = this.cameraVideoPlayers.get(streamIndex)?.nativeElement;
     const videoFileElement = this.videoFilePlayers.get(streamIndex)?.nativeElement;
-
-    // Reset current stream's video elements
+  
+    // Reset video elements
     if (cameraVideoElement) {
       cameraVideoElement.srcObject = null;
       cameraVideoElement.pause();
@@ -227,15 +234,23 @@ export class DashboardComponent implements AfterViewInit, OnInit {
       videoFileElement.pause();
       videoFileElement.load();
     }
-
+  
     // Update input source
     this.visionService.inputSource[stream] = newSource;
-
-    // Start camera stream if camera is selected
+  
+    // Set input name accordingly
+    if (newSource === 'file') {
+      this.visionService.inputNames[stream] = 'No file selected';
+    } else {
+      this.visionService.inputNames[stream] = 'Live Feed';
+    }
+  
+    // Start camera stream if needed
     if (newSource === 'laptop-camera') {
       if (stream !== 'Stream 1') {
         console.warn('Laptop Camera can only be selected for Stream 1. Reverting to file.');
         this.visionService.inputSource[stream] = 'file';
+        this.visionService.inputNames[stream] = 'No file selected';
         return;
       }
       if (this.laptopCameraDeviceId) {
@@ -243,11 +258,13 @@ export class DashboardComponent implements AfterViewInit, OnInit {
       } else {
         console.error('Laptop camera device not found. Reverting to file.');
         this.visionService.inputSource[stream] = 'file';
+        this.visionService.inputNames[stream] = 'No file selected';
       }
     } else if (newSource === 'smartphone-camera') {
       if (stream !== 'Stream 2') {
         console.warn('Smartphone Camera can only be selected for Stream 2. Reverting to file.');
         this.visionService.inputSource[stream] = 'file';
+        this.visionService.inputNames[stream] = 'No file selected';
         return;
       }
       if (this.smartphoneCameraDeviceId) {
@@ -255,9 +272,11 @@ export class DashboardComponent implements AfterViewInit, OnInit {
       } else {
         console.error('Smartphone camera device not found. Reverting to file.');
         this.visionService.inputSource[stream] = 'file';
+        this.visionService.inputNames[stream] = 'No file selected';
       }
     }
   }
+  
 
   private startCameraStreamWithRetry(
     videoElement: HTMLVideoElement,
@@ -306,15 +325,6 @@ export class DashboardComponent implements AfterViewInit, OnInit {
         videoElement.pause();
         videoElement.load();
       });
-  }
-
-
-  private stopCameraFeed(videoElement: HTMLVideoElement): void {
-    if (videoElement.srcObject instanceof MediaStream) {
-      videoElement.srcObject.getTracks().forEach(track => track.stop());
-      videoElement.srcObject = null;
-      console.log(`Stopped camera feed for video element: ${videoElement.id}`);
-    }
   }
 
   startOperation(stream: string, operation: string): void {
@@ -372,25 +382,17 @@ export class DashboardComponent implements AfterViewInit, OnInit {
   }
 
   getInputName(stream: string): string {
-    // This will be the second line of the caption.
-    // You can customize this based on your data structure.
-    // For now, let's just use a placeholder or a secondary piece of info.
     const currentInputSource = this.visionService.inputSource[stream];
-    if (currentInputSource === 'file') {
-      // Get the video element for this stream
-      const videoFilePlayer = this.videoFilePlayers?.find((player, index) => {
-        return this.streams[index] === stream;
-      });
 
-      if (videoFilePlayer && videoFilePlayer.nativeElement.src) {
-        // Extract filename from the source URL
-        const filename = videoFilePlayer.nativeElement.src.split('/').pop();
-        return filename || 'No file selected';
-      }
-      return 'No file selected';
-    } else if (currentInputSource === 'laptop-camera' || currentInputSource === 'smartphone-camera') {
+    if (currentInputSource === 'file') {
+      return this.clipNames[stream] || 'No file selected';
+    } else if (
+      currentInputSource === 'laptop-camera' ||
+      currentInputSource === 'smartphone-camera'
+    ) {
       return 'Live Feed';
     }
+
     return '';
   }
 
@@ -402,25 +404,6 @@ export class DashboardComponent implements AfterViewInit, OnInit {
     }
   }
 
-  loadVideoFile(event: Event, stream: string, videoPlayer: ElementRef<HTMLVideoElement>): void {
-    const fileInput = event.target as HTMLInputElement;
-    const file = fileInput.files?.[0];
-    if (!file) return;
-
-    const videoElement = videoPlayer.nativeElement;
-    const fileUrl = URL.createObjectURL(file);
-
-    videoElement.src = fileUrl;
-    videoElement.load();
-    videoElement.play();
-
-    // Update the clip name for this stream
-    this.clipNames[stream] = file.name;
-
-    // Reset the file input for next use
-    fileInput.value = '';
-  }
-
   triggerFileInput(fileInput: HTMLInputElement, stream: string) {
     // First, set the input source to 'file'
     this.visionService.inputSource[stream] = 'file';
@@ -428,3 +411,22 @@ export class DashboardComponent implements AfterViewInit, OnInit {
     fileInput.click();
   }
 }
+
+
+  // loadVideoFile(event: Event, stream: string, videoPlayer: ElementRef<HTMLVideoElement>): void {
+  //   const fileInput = event.target as HTMLInputElement;
+  //   const file = fileInput.files?.[0];
+  //   if (!file) return;
+
+  //   const videoElement = videoPlayer.nativeElement;
+  //   const fileUrl = URL.createObjectURL(file);
+
+  //   videoElement.src = fileUrl;
+  //   videoElement.load();
+  //   videoElement.play();
+
+  //   // Update the input name for this stream
+  //   this.inputNames[stream] = file.name;
+
+  //   fileInput.value = '';
+  // }

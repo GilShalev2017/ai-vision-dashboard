@@ -22,6 +22,12 @@ export class VisionService {
   private audioContexts: Record<string, AudioContext> = {};
   private alprSockets: Record<string, WebSocket> = {};
   private alprIntervals: Record<string, any> = {};
+  inputNames: Record<string, string> = {
+    'Stream 1': 'Live Feed',
+    'Stream 2': 'Live Feed',
+    'Stream 3': 'No file selected',
+    'Stream 4': 'No file selected'
+  };
 
   constructor(private http: HttpClient) {}
 
@@ -275,9 +281,6 @@ export class VisionService {
     socket.onmessage = (msg) => {
       const data = JSON.parse(msg.data);
       this.handleAlprResult(stream, video, data);
-      // const result = JSON.parse(msg.data);
-      // this.overlays[stream] = result.overlays || [];
-      //console.log(`[ALPR] Result for ${stream}:`, result);
     };
   
     const canvas = document.createElement('canvas');
@@ -336,7 +339,6 @@ export class VisionService {
     }
     delete this.alprSockets[stream];
   }
-
   
   startRealtimeAzureSTTViaScriptProcessor(stream: string, audioStream: MediaStream): void {
 
@@ -409,7 +411,6 @@ export class VisionService {
     };
   }
 
-
   /**
    * Starts real-time Speech-to-Text using OpenAI, sending audio in chunks via HTTP POST.
    */
@@ -473,11 +474,13 @@ export class VisionService {
       return;
     }
     console.log(`[VisionService] File selected: ${file.name} (${file.type}, ${file.size} bytes) for stream: ${stream}.`);
+    this.inputNames[stream] = file.name;
 
     // **IMPORTANT CHANGE:** Call releaseMediaStream to stop any previous video/camera stream
     // associated with this stream ID before loading a new one.
     this.releaseMediaStream(stream);
     this.inputSource[stream] = 'file'; // Set the input source type immediately
+    this.overlays[stream] = [];
 
     // Set the video source to the selected file
     videoElement.srcObject = null; // Clear any previous camera stream
@@ -542,18 +545,10 @@ export class VisionService {
       return;
     }
   
-    const rect = videoElement.getBoundingClientRect(); // visible size in layout
-    const renderedWidth = rect.width;
-    const renderedHeight = rect.height;
-  
-    if (!renderedWidth || !renderedHeight) {
-      console.warn('[ALPR] Could not determine rendered video size.');
-      return;
-    }
-  
-    const scaleX = renderedWidth / originalWidth;
-    const scaleY = renderedHeight / originalHeight;
-  
+    const rect = videoElement.getBoundingClientRect();
+    const scaleX = rect.width / originalWidth;
+    const scaleY = rect.height / originalHeight;
+
     const scaledOverlays = overlays.map((overlay: any) => ({
       label: overlay.label,
       x: overlay.x * scaleX,
@@ -574,3 +569,71 @@ export class VisionService {
     this.recognitionLanguages[stream] = langCode;
   }
 }
+
+
+// startAlprSocketNotOptimized(stream: string, video: HTMLVideoElement): void {
+//   // 🛑 Stop any existing socket or interval for this stream before starting a new one
+//   this.stopAlprSocket(stream);
+
+//   const socket = new WebSocket(`ws://localhost:5254/ws/alpr?stream=${encodeURIComponent(stream)}`);
+//   this.alprSockets[stream] = socket;
+
+//   socket.onmessage = (msg) => {
+//     const data = JSON.parse(msg.data);
+//     this.handleAlprResult(stream, video, data);
+//   };
+
+//   const canvas = document.createElement('canvas');
+//   const ctx = canvas.getContext('2d')!;
+//   const FPS = 5; // You may lower to 3 if CPU is overloaded
+
+//   const targetWidth = 640; // Resize frame width to reduce data size
+//   let targetHeight = 360;  // Will be updated based on aspect ratio
+
+//   const sendFrame = async () => {
+//     if (
+//       socket.readyState !== WebSocket.OPEN ||
+//       video.paused ||
+//       video.ended ||
+//       video.videoWidth === 0 ||
+//       video.videoHeight === 0
+//     ) return;
+
+//     // Maintain aspect ratio
+//     targetHeight = Math.floor(video.videoHeight / video.videoWidth * targetWidth);
+
+//     // Resize canvas
+//     canvas.width = targetWidth;
+//     canvas.height = targetHeight;
+
+//     // Draw the current video frame onto canvas
+//     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+//     // Compress to JPEG (quality: 0.6)
+//     canvas.toBlob(async (blob) => {
+//       if (blob) {
+//         const base64Data = await this.convertBlobToBase64(blob);
+//         const message = {
+//           stream,
+//           data: base64Data
+//         };
+//         socket.send(JSON.stringify(message));
+//       }
+//     }, 'image/jpeg', 0.6); // 👈 lower quality for better performance
+//   };
+
+//   socket.onopen = () => {
+//     console.log(`[ALPR] Socket opened for ${stream}.`);
+//     this.alprIntervals[stream] = setInterval(sendFrame, 1000 / FPS);
+//   };
+
+//   socket.onclose = () => {
+//     console.log(`[ALPR] Socket closed for ${stream}.`);
+//     this.stopAlprSocket(stream);
+//   };
+
+//   socket.onerror = (err) => {
+//     console.error(`[ALPR] WebSocket error for ${stream}:`, err);
+//     this.stopAlprSocket(stream);
+//   };
+// }
